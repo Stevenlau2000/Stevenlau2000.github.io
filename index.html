@@ -1,117 +1,1229 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#080c14" />
-  <title>老宋 · 空压机 AI 维修副驾</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css" />
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"><meta name="format-detection" content="telephone=no">
+<title>AI Smart Inventory — 智能库存管理与采购预测系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* ===== Signature palette: Aqua Control Tower ===== */
+  --nav:#0a2f35;
+  --bg:#eef3f2;
+  --card:#ffffff;
+  --pri:#0e2a30;
+  --sec:#54747c;
+  --mut:#90a4aa;
+  --border:#dde7e5;
+  --blue:#0ca497;            /* brand teal (kept name for JS compat) */
+  --teal:#0ca497;
+  --teal-d:#0a8478;
+  --cyan:#0891b2;
+  --green:#1f9e6e;
+  --red:#e25c4b;
+  --amber:#e0a23c;
+  --font:'Sora','Noto Sans SC',-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+  --mono:'JetBrains Mono','SF Mono',"Fira Code",monospace;
+  --r:15px;--rs:10px;
+  --shadow:0 1px 2px rgba(14,42,47,.04),0 10px 30px -16px rgba(14,42,47,.22);
+  --shadow-lg:0 24px 60px -20px rgba(6,35,41,.35);
+}
+html{font-size:14px}
+body{font-family:var(--font);background:var(--bg);color:var(--pri);display:flex;min-height:100vh;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-tap-highlight-color:transparent;position:relative}
+::selection{background:rgba(12,164,151,.22);color:var(--pri)}
+body::-webkit-scrollbar{width:10px;height:10px}
+body::-webkit-scrollbar-thumb{background:rgba(12,164,151,.28);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+body::-webkit-scrollbar-thumb:hover{background:rgba(12,164,151,.45);background-clip:content-box}
+/* atmosphere */
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(900px 620px at 6% -8%,rgba(12,164,151,.11),transparent 60%),
+  radial-gradient(820px 520px at 101% -2%,rgba(8,145,178,.09),transparent 55%),
+  radial-gradient(760px 720px at 98% 102%,rgba(31,158,110,.06),transparent 60%)}
+/* ===== Sidebar ===== */
+.sidebar{width:62px;background:linear-gradient(180deg,#0e3d44 0%,#072a30 100%);display:flex;flex-direction:column;align-items:center;padding:16px 0;position:fixed;top:0;left:0;bottom:0;z-index:100;gap:4px;box-shadow:5px 0 26px -14px rgba(6,35,41,.6);overflow:hidden}
+.sidebar::before{content:'';position:absolute;top:-30%;left:-60%;width:160%;height:55%;background:radial-gradient(circle,rgba(12,164,151,.35),transparent 70%);filter:blur(10px);pointer-events:none}
+.sidebar .logo{width:34px;height:34px;background:linear-gradient(135deg,var(--teal),var(--cyan));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;letter-spacing:.5px;color:#fff;margin-bottom:18px;box-shadow:0 6px 16px -4px rgba(12,164,151,.7);position:relative}
+.sidebar .nav-item{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:16px;cursor:pointer;transition:.18s cubic-bezier(.2,.7,.3,1);position:relative}
+.sidebar .nav-item:hover{background:rgba(255,255,255,.09);color:rgba(255,255,255,.92);transform:translateY(-1px)}
+.sidebar .nav-item.active{background:linear-gradient(135deg,var(--teal),var(--cyan));color:#fff;box-shadow:0 8px 18px -5px rgba(12,164,151,.75)}
+.sidebar .nav-item .badge{position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px #072a30}
+.sidebar .spacer{flex:1}
+/* ===== Main ===== */
+.main{margin-left:62px;flex:1;padding:22px 28px 44px;max-width:1460px;min-width:0}
+.page{display:none}
+.page.active{display:block;animation:pageIn .4s cubic-bezier(.2,.7,.3,1)}
+@keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.top h1{font-size:19px;font-weight:600;letter-spacing:-.4px}
+.top .sub{font-size:11px;color:var(--mut);margin-top:3px;font-weight:400}
+.top-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* ===== Buttons ===== */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;font-size:12px;font-weight:600;color:var(--pri);cursor:pointer;transition:.18s cubic-bezier(.2,.7,.3,1);white-space:nowrap;-webkit-appearance:none;appearance:none;box-shadow:0 1px 2px rgba(14,42,47,.04)}
+.btn:hover{border-color:var(--teal);color:var(--teal);transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(12,164,151,.5)}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn-pri{background:linear-gradient(135deg,var(--teal),var(--cyan));color:#fff;border-color:transparent;box-shadow:0 8px 18px -7px rgba(12,164,151,.6)}
+.btn-pri:hover{opacity:1;color:#fff;filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 12px 24px -8px rgba(12,164,151,.7)}
+.btn-red{background:linear-gradient(135deg,#ec6a59,var(--red));color:#fff;border-color:transparent;box-shadow:0 8px 18px -8px rgba(226,92,75,.55)}
+.btn-red:hover{opacity:1;color:#fff;filter:brightness(1.04)}
+.btn-sm{padding:5px 11px;font-size:11px}
+/* ===== Cards / KPI ===== */
+.card{background:rgba(255,255,255,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:rgba(255,255,255,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(221,231,229,.95);border-radius:var(--r);padding:15px 16px 14px;position:relative;overflow:hidden;box-shadow:var(--shadow);transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s}
+.kpi:hover{transform:translateY(-4px);box-shadow:0 16px 36px -18px rgba(14,42,47,.3)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:3px 3px 0 0}
+.kpi.blue::before{background:linear-gradient(90deg,var(--teal),var(--cyan))}
+.kpi.green::before{background:linear-gradient(90deg,var(--green),#3fc08a)}
+.kpi.red::before{background:linear-gradient(90deg,var(--red),#f08a7d)}
+.kpi.amber::before{background:linear-gradient(90deg,var(--amber),#f0c069)}
+.kpi .l{font-size:10px;color:var(--sec);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.kpi .v{font-size:24px;font-weight:600;letter-spacing:-.6px;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .v.red{color:var(--red)}.kpi .v.green{color:var(--green)}.kpi .v.amber{color:#c5861f}
+.kpi .s{font-size:10px;color:var(--mut);margin-top:4px}
+/* ===== Charts ===== */
+.charts{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:16px}
+@media(max-width:960px){.charts{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.charts{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+.chart-box{background:rgba(255,255,255,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:var(--r);padding:15px 17px 11px;box-shadow:var(--shadow)}
+.chart-box .ct{font-size:10px;color:var(--sec);font-weight:600;margin-bottom:10px;text-transform:uppercase;letter-spacing:.6px;display:flex;align-items:center;gap:6px}
+.chart-box .ct::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px rgba(12,164,151,.18)}
+.chart-box .cw{position:relative;width:100%}
+/* ===== AI summary ===== */
+.ai-summary{background:linear-gradient(135deg,rgba(12,164,151,.13),rgba(255,255,255,.92));border:1px solid rgba(12,164,151,.32);border-radius:var(--r);padding:15px 19px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px;box-shadow:var(--shadow)}
+.ai-summary .icon{font-size:21px;flex-shrink:0;filter:drop-shadow(0 3px 7px rgba(12,164,151,.4));animation:floaty 3.4s ease-in-out infinite}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.ai-summary .txt{font-size:12px;line-height:1.75;color:var(--pri)}
+.ai-summary .txt strong{color:var(--teal)}
+/* ===== Tables ===== */
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{background:linear-gradient(180deg,#f1f7f6,#eaf2f1)}
+th{padding:9px 11px;text-align:left;font-weight:600;color:var(--sec);font-size:10px;white-space:nowrap;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.4px}
+td{padding:9px 11px;border-bottom:1px solid #eef2f1;white-space:nowrap;font-size:12px}
+tr:last-child td{border-bottom:none}
+tr:hover{background:rgba(12,164,151,.045)}
+td.mono{font-family:var(--mono);font-size:11px}
+td.num{text-align:right}
+td.name{font-weight:600}
+.badge{display:inline-flex;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.2px}
+.badge.green{background:rgba(31,158,110,.14);color:var(--green)}
+.badge.yellow{background:rgba(224,162,60,.16);color:#b9791f}
+.badge.red{background:rgba(226,92,75,.14);color:var(--red)}
+.badge.gray{background:#eef1f0;color:#5b6b6f}
+.badge.blue{background:rgba(12,164,151,.14);color:var(--teal)}
+.badge.big{font-size:11px;padding:4px 11px;border-radius:8px}
+/* ===== Forms ===== */
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:11px;color:var(--sec);margin-bottom:4px;font-weight:600;letter-spacing:.2px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:var(--rs);font-size:12px;font-family:var(--font);background:#fff;outline:none;transition:.16s;color:var(--pri);-webkit-appearance:none;appearance:none}
+.form-group input:focus,.form-group select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(12,164,151,.15)}
+.form-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(8,30,33,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center;padding:18px}
+.modal-overlay.open{display:flex}
+.modal{background:rgba(255,255,255,.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);border-radius:18px;padding:24px 26px;width:90%;max-width:540px;max-height:84vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:modalIn .32s cubic-bezier(.2,.8,.3,1)}
+@keyframes modalIn{from{opacity:0;transform:translateY(22px) scale(.96)}to{opacity:1;transform:none}}
+.modal h2{font-size:16px;font-weight:600;margin-bottom:16px;letter-spacing:-.2px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.search-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.search-bar input{padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);font-size:12px;min-width:180px;flex:1;outline:none;background:#fff;transition:.16s}
+.search-bar input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(12,164,151,.13)}
+/* ===== AI Copilot ===== */
+.ai-copilot{position:fixed;bottom:22px;right:22px;z-index:150}
+.ai-copilot-btn{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--cyan));color:#fff;border:none;font-size:21px;cursor:pointer;box-shadow:0 10px 26px -7px rgba(12,164,151,.7);transition:.18s;animation:pulse 3.2s infinite}
+.ai-copilot-btn:hover{transform:scale(1.06)}
+@keyframes pulse{0%,100%{box-shadow:0 10px 26px -7px rgba(12,164,151,.7)}50%{box-shadow:0 10px 34px -3px rgba(12,164,151,.9)}}
+.ai-panel{position:fixed;bottom:86px;right:22px;width:380px;max-height:480px;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-lg);display:none;flex-direction:column;z-index:150;overflow:hidden}
+.ai-panel.open{display:flex;animation:modalIn .28s cubic-bezier(.2,.8,.3,1)}
+.ai-panel .hdr{padding:13px 17px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,rgba(12,164,151,.1),transparent)}
+.ai-panel .hdr button{background:none;border:none;font-size:17px;cursor:pointer;color:var(--sec)}
+.ai-panel .msgs{padding:14px 17px;overflow-y:auto;flex:1;font-size:12px;line-height:1.7}
+.ai-panel .msgs .msg{margin-bottom:10px;padding:9px 13px;border-radius:12px}
+.ai-panel .msgs .user{background:linear-gradient(135deg,var(--teal),var(--cyan));color:#fff;margin-left:30px;box-shadow:0 6px 16px -8px rgba(12,164,151,.6)}
+.ai-panel .msgs .ai{background:#f1f6f5;margin-right:30px;border:1px solid #e7efee}
+.ai-panel .input-area{display:flex;padding:9px 13px;border-top:1px solid var(--border);gap:7px;background:#fafcfc}
+.ai-panel .input-area input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);font-size:12px;outline:none;background:#fff}
+.ai-panel .input-area input:focus{border-color:var(--teal)}
+.ai-panel .input-area button{padding:8px 14px;background:linear-gradient(135deg,var(--teal),var(--cyan));color:#fff;border:none;border-radius:var(--rs);cursor:pointer;font-size:12px;font-weight:600}
+.star{color:var(--amber)}.star-0{color:var(--mut)}
+.empty-state{padding:34px;text-align:center;color:var(--mut);font-size:13px}
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.right{float:right}
+.text-muted{color:var(--sec)}
+.modal-xl{max-width:720px}
+.copilot-suggestion{background:linear-gradient(135deg,rgba(12,164,151,.08),#fff);border:1px solid rgba(12,164,151,.3);border-radius:11px;padding:11px 15px;margin:9px 0;font-size:12px;line-height:1.65}
+.copilot-suggestion strong{color:var(--teal)}
+/* ===== Mobile / WeChat H5 Optimizations ===== */
+.table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.mobile-tabbar{display:none}
+@media(max-width:768px){
+  html{font-size:15px}
+  body{overflow-x:hidden;line-height:1.45}
+  .sidebar{display:none!important}
+  .main{margin-left:0!important;padding:14px 13px 80px;max-width:100%}
+  .top{margin-bottom:14px}
+  .top h1{font-size:17px}
+  .kpi-grid{grid-template-columns:repeat(2,1fr);gap:9px}
+  .kpi .v{font-size:21px}
+  .charts{grid-template-columns:1fr;gap:11px}
+  .chart-box .cw{height:205px}
+  .btn{padding:10px 15px;font-size:13px}
+  .btn-sm{padding:8px 12px}
+  .form-row{grid-template-columns:1fr}
+  .search-bar input{min-width:0}
+  .modal{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;padding:20px}
+  .modal-xl{max-width:100%}
+  .ai-panel{right:0;left:0;bottom:0;width:100%;max-height:74%;border-radius:18px 18px 0 0}
+  .ai-copilot{right:15px;bottom:74px}
+  .mobile-tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:120;height:60px;background:rgba(255,255,255,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);box-shadow:0 -4px 18px -10px rgba(14,42,47,.18);padding-bottom:env(safe-area-inset-bottom);align-items:stretch}
+  .mobile-tabbar .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--mut);font-size:9px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:.15s}
+  .mobile-tabbar .tab.active{color:var(--teal)}
+  .mobile-tabbar .tab.active .ic{transform:translateY(-2px);filter:drop-shadow(0 3px 6px rgba(12,164,151,.5))}
+  .mobile-tabbar .tab .ic{font-size:19px;line-height:1;transition:.15s}
+}
+.wx-hint{display:none;position:fixed;top:0;left:0;right:0;z-index:300;background:linear-gradient(135deg,#0e3d44,#072a30);color:#fff;font-size:12px;text-align:center;padding:9px 34px;line-height:1.5;box-shadow:0 4px 14px -6px rgba(6,35,41,.5)}
+.wx-hint .x{position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;opacity:.7}
+.wx-hint b{color:#7fdcce}
+/* ===== Auth ===== */
+.auth-screen{position:fixed;inset:0;z-index:1000;background:linear-gradient(135deg,#06343a,#0a2a30 55%,#06151a);display:flex;align-items:center;justify-content:center;padding:20px;overflow:hidden}
+.auth-screen::before{content:'';position:absolute;inset:-25%;background:
+  radial-gradient(440px 440px at 18% 28%,rgba(12,164,151,.4),transparent 60%),
+  radial-gradient(400px 400px at 82% 72%,rgba(8,145,178,.32),transparent 60%),
+  radial-gradient(320px 320px at 60% 18%,rgba(31,158,110,.28),transparent 60%);
+  filter:blur(22px);animation:drift 20s ease-in-out infinite;pointer-events:none}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(4%,-3%) scale(1.06)}66%{transform:translate(-3%,4%) scale(1.02)}}
+.auth-screen.hidden{display:none}
+.auth-card{width:100%;max-width:372px;background:rgba(255,255,255,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.55);border-radius:24px;padding:30px 26px;box-shadow:var(--shadow-lg);position:relative;animation:modalIn .5s cubic-bezier(.2,.8,.3,1)}
+.auth-logo{font-size:21px;font-weight:800;color:var(--teal);text-align:center;letter-spacing:-.3px}
+.auth-sub{font-size:12px;color:var(--mut);text-align:center;margin:5px 0 20px}
+.auth-tabs{display:flex;background:#eef3f2;border-radius:12px;padding:5px;margin-bottom:18px}
+.auth-tab{flex:1;text-align:center;padding:9px;font-size:13px;font-weight:600;color:var(--mut);border-radius:9px;cursor:pointer;transition:.18s}
+.auth-tab.active{background:linear-gradient(135deg,var(--teal),var(--cyan));color:#fff;box-shadow:0 6px 16px -6px rgba(12,164,151,.55)}
+.auth-form input{width:100%;padding:12px 13px;border:1px solid var(--border);border-radius:11px;font-size:14px;margin-bottom:11px;outline:none;font-family:var(--font);-webkit-appearance:none;appearance:none;box-sizing:border-box;transition:.16s;background:#fff}
+.auth-form input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(12,164,151,.15)}
+.auth-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin:-3px 0 13px}
+.remember{display:flex;align-items:center;gap:6px;color:var(--mut);cursor:pointer;user-select:none}
+.remember input{width:auto;margin:0;accent-color:var(--teal)}
+.link{color:var(--teal);cursor:pointer;text-decoration:none;font-weight:600}
+.link:hover{text-decoration:underline}
+.pw-meter{height:6px;background:#eef3f2;border-radius:4px;overflow:hidden;margin:-5px 0 9px}
+.pw-bar{height:100%;width:0;transition:.25s;border-radius:4px}
+.pw-tip{font-size:11px;color:var(--mut);margin-bottom:11px;line-height:1.4}
+.auth-err{font-size:12px;color:var(--red);min-height:16px;margin-bottom:8px;font-weight:500}
+.btn-block{width:100%;justify-content:center;padding:12px;font-size:14px}
+.auth-foot{font-size:11px;color:var(--mut);text-align:center;margin-top:16px;line-height:1.55}
+/* ===== Staggered entrance (dashboard) ===== */
+.page.active .ai-summary{animation:pop .5s cubic-bezier(.2,.7,.3,1) both}
+.page.active .kpi-grid .kpi{animation:pop .55s cubic-bezier(.2,.7,.3,1) both}
+.page.active .kpi-grid .kpi:nth-child(1){animation-delay:.04s}
+.page.active .kpi-grid .kpi:nth-child(2){animation-delay:.09s}
+.page.active .kpi-grid .kpi:nth-child(3){animation-delay:.14s}
+.page.active .kpi-grid .kpi:nth-child(4){animation-delay:.19s}
+.page.active .kpi-grid .kpi:nth-child(5){animation-delay:.24s}
+.page.active .kpi-grid .kpi:nth-child(6){animation-delay:.29s}
+.page.active .kpi-grid .kpi:nth-child(7){animation-delay:.34s}
+.page.active .kpi-grid .kpi:nth-child(8){animation-delay:.39s}
+.page.active .charts .chart-box{animation:pop .55s cubic-bezier(.2,.7,.3,1) both}
+.page.active .charts .chart-box:nth-child(1){animation-delay:.12s}
+.page.active .charts .chart-box:nth-child(2){animation-delay:.18s}
+.page.active .charts .chart-box:nth-child(3){animation-delay:.24s}
+@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+</style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo-badge"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="16" cy="16" r="12"/><path d="M16 16 L16 6"/><circle cx="16" cy="16" r="2.2" fill="currentColor" stroke="none"/><path d="M6.5 16 H9 M23 16 H25.5 M16 6.5 V9" stroke-width="1.5" opacity=".55"/></svg></span>
-      <div class="brand-txt">
-        <strong>老宋 · 维修副驾</strong>
-        <small><span class="status-dot" id="conn-dot"></span><span id="conn-state">未配置 API</span></small>
-      </div>
+<div class="wx-hint" id="wxHint">💡 如显示异常或功能受限，请点击右上角 <b>···</b> 选择「在浏览器打开」获得完整体验。<span class="x" onclick="closeWxHint()">✕</span></div>
+
+<!-- ===== Auth Screen ===== -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">📦 AI Smart Inventory</div>
+    <div class="auth-sub">智能库存管理与采购预测系统</div>
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">登录</div>
+      <div class="auth-tab" id="tabReg" onclick="switchAuthTab('register')">注册</div>
     </div>
-    <div class="actions">
-      <button id="btn-kb" class="icon-btn" title="知识库文件">📎</button>
-      <button id="btn-cases" class="icon-btn" title="案例库">📚</button>
-      <button id="btn-settings" class="icon-btn" title="设置">⚙️</button>
-      <button id="btn-new" class="icon-btn" title="新对话">➕</button>
-    </div>
-  </header>
-
-  <main id="chat" class="chat"></main>
-
-  <form id="input-bar" class="input-bar" autocomplete="off">
-    <textarea id="user-input" rows="1" placeholder="描述故障现象，如：空压机排气温度到105℃，电流正常，频繁跳机…"></textarea>
-    <button id="btn-send" type="submit" class="send-btn" aria-label="发送">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-    </button>
-  </form>
-
-  <!-- 设置面板 -->
-  <div id="settings-modal" class="modal hidden">
-    <div class="sheet">
-      <div class="sheet-head">
-        <h3>⚙️ 连接设置</h3>
-        <button class="close-x" data-close="settings-modal">✕</button>
+    <div class="auth-form" id="loginForm">
+      <input id="authUser" placeholder="用户名 / 账号" autocomplete="username">
+      <input id="authPw" type="password" placeholder="密码" autocomplete="current-password" oninput="if(authMode==='register')updatePwMeter()">
+      <div class="auth-row">
+        <label class="remember"><input type="checkbox" id="authRemember"> 记住登录</label>
+        <span class="link" onclick="showForgot()">忘记密码？</span>
       </div>
-      <div class="sheet-body">
-        <label>运行模式</label>
-        <select id="set-mode">
-          <option value="online">在线 LLM（需 API Key）</option>
-          <option value="offline">离线规则引擎（零 Key，可离线）</option>
+      <div id="regFields" style="display:none">
+        <input id="authPw2" type="password" placeholder="确认密码" autocomplete="new-password">
+        <div class="pw-meter"><div class="pw-bar" id="pwBar"></div></div>
+        <div class="pw-tip" id="pwTip">密码强度：请输入至少8位，含大小写、数字、符号中3类</div>
+        <select id="authSecQ" style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;outline:none;font-family:var(--font);-webkit-appearance:none;appearance:none;box-sizing:border-box;background:#fff;color:var(--pri)">
+          <option value="">设置安全问题（用于找回密码）</option>
+          <option>你出生城市的名字？</option>
+          <option>你第一只宠物的名字？</option>
+          <option>你小学班主任的姓氏？</option>
+          <option>你最喜欢的一部电影？</option>
+          <option>你母亲的生日（月日）？</option>
         </select>
-        <p class="hint">📴 离线模式不调用任何大模型，基于内置知识库故障树直接输出，手机打开即用、无需网络。</p>
-        <label>API 端点</label>
-        <select id="set-endpoint"></select>
-        <label>自定义端点 URL（选"自定义"时填写）</label>
-        <input id="set-url" type="text" placeholder="https://your-endpoint/v1" />
-        <label>模型名</label>
-        <input id="set-model" type="text" placeholder="hunyuan-turbos-latest" />
-        <label>API Key（仅存本机浏览器，不上传）</label>
-        <input id="set-key" type="password" placeholder="sk-..." />
-        <p class="hint">🔒 Key 仅保存在你当前手机/浏览器，不会发送到除 LLM 服务商外的任何地方。</p>
-        <div class="row">
-          <button id="set-save" class="primary">保存</button>
-          <button id="set-test" class="ghost">测试连接</button>
-          <button id="set-clear" class="danger-ghost">清空</button>
-        </div>
-        <p id="set-msg" class="msg"></p>
+        <input id="authSecA" placeholder="安全问题答案" autocomplete="off">
       </div>
+      <div class="auth-err" id="authErr"></div>
+      <button class="btn btn-pri btn-block" id="authSubmit" onclick="submitAuth()">登录</button>
+    </div>
+    <div class="auth-form" id="forgotForm" style="display:none">
+      <input id="fgUser" placeholder="用户名 / 账号">
+      <div id="fgQuestion" class="pw-tip" style="display:none"></div>
+      <input id="fgAnswer" placeholder="安全问题答案" autocomplete="off" style="display:none">
+      <input id="fgNew" type="password" placeholder="新密码" autocomplete="new-password" style="display:none">
+      <input id="fgNew2" type="password" placeholder="确认新密码" autocomplete="new-password" style="display:none">
+      <div class="auth-err" id="fgErr"></div>
+      <button class="btn btn-pri btn-block" id="fgSubmit" onclick="forgotStep()">下一步</button>
+      <div class="auth-row" style="margin-top:12px;justify-content:center"><span class="link" onclick="showLogin()">返回登录</span></div>
+    </div>
+    <div class="auth-foot">🔒 账号与数据仅保存在本设备浏览器中，不会上传任何服务器</div>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+  <div class="logo">AI</div>
+  <div class="nav-item active" data-page="dashboard" onclick="goPage('dashboard')" title="Dashboard">📊</div>
+  <div class="nav-item" data-page="products" onclick="goPage('products')" title="产品中心">📦</div>
+  <div class="nav-item" data-page="inventory" onclick="goPage('inventory')" title="库存管理">📋</div>
+  <div class="nav-item" data-page="receipts-in" onclick="goPage('receipts-in')" title="入库管理">➡️</div>
+  <div class="nav-item" data-page="receipts-out" onclick="goPage('receipts-out')" title="出库管理">⬅️</div>
+  <div class="nav-item" data-page="transactions" onclick="goPage('transactions')" title="库存流水">📈</div>
+  <div class="nav-item" data-page="ai-forecast" onclick="goPage('ai-forecast')" title="AI预测分析">🤖</div>
+  <div class="nav-item" data-page="purchase" onclick="goPage('purchase')" title="采购建议">🛒</div>
+  <div class="nav-item" data-page="settings" onclick="goPage('settings')" title="系统设置">⚙️</div>
+</nav>
+
+<!-- Main -->
+<div class="main" id="main">
+
+<!-- ===== Dashboard ===== -->
+<div class="page active" id="page-dashboard">
+  <div class="top"><div><h1>经营驾驶舱</h1><div class="sub" id="dashSub">正在加载...</div></div>
+    <div class="top-r"><button class="btn btn-pri btn-sm" onclick="refreshDashboard()">🔄 刷新</button></div>
+  </div>
+  <div class="ai-summary" id="aiSummary"><div class="icon">🤖</div><div class="txt" id="aiSummaryText"><strong>AI 今日分析</strong>：正在计算库存健康度...</div></div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="charts">
+    <div class="chart-box"><div class="ct">库存趋势（近30天）</div><div class="cw" style="height:220px"><canvas id="trendChart"></canvas></div></div>
+    <div class="chart-box"><div class="ct">分类库存占比</div><div class="cw" style="height:220px"><canvas id="pieChart"></canvas></div></div>
+    <div class="chart-box"><div class="ct">安全库存状态</div><div class="cw" style="height:220px"><canvas id="safetyChart"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ===== 产品中心 ===== -->
+<div class="page" id="page-products">
+  <div class="top"><div><h1>产品中心</h1></div>
+    <div class="top-r">
+      <button class="btn btn-sm" onclick="exportProductsCSV()">📥 导出</button>
+      <button class="btn btn-sm" onclick="document.getElementById('prodImport').click()">📤 导入</button>
+      <input type="file" id="prodImport" accept=".csv,.json" style="display:none" onchange="importProducts(this.files)">
+      <button class="btn btn-pri btn-sm" onclick="openProductModal()">➕ 新增产品</button>
     </div>
   </div>
+  <div class="search-bar"><input placeholder="搜索 SKU、产品名称..." id="prodSearch" oninput="renderProducts()">
+    <select id="prodCatFilter" onchange="renderProducts()" style="padding:6px 10px;border:.5px solid var(--border);border-radius:var(--rs);font-size:12px"><option value="">全部分类</option></select>
+  </div>
+  <div class="card" style="padding:0;overflow-x:auto"><table id="prodTable"><thead><tr><th>SKU</th><th>产品名称</th><th>分类</th><th>品牌</th><th>库存</th><th>安全库存</th><th>周期(天)</th><th>最近单价</th><th>库存金额</th><th>操作</th></tr></thead><tbody id="prodTbody"></tbody></table></div>
+</div>
 
-  <!-- 案例库面板 -->
-  <div id="cases-modal" class="modal hidden">
-    <div class="sheet wide">
-      <div class="sheet-head">
-        <h3>📚 案例库 / 审核队列</h3>
-        <button class="close-x" data-close="cases-modal">✕</button>
-      </div>
-      <div class="sheet-body">
-        <div class="cases-toolbar">
-          <span id="cases-count" class="muted">0 条</span>
-          <button id="cases-export" class="ghost sm">导出 JSON</button>
-          <button id="cases-refresh" class="ghost sm">刷新</button>
-        </div>
-        <ul id="cases-list" class="cases-list"></ul>
-        <div id="case-detail" class="case-detail hidden"></div>
-      </div>
+<!-- ===== 库存管理 ===== -->
+<div class="page" id="page-inventory">
+  <div class="top"><div><h1>库存管理</h1></div>
+    <div class="top-r">
+      <button class="btn btn-sm" onclick="openAdjustModal()">📝 库存调整</button>
+      <button class="btn btn-sm" onclick="openStocktakeModal()">✅ 库存盘点</button>
     </div>
   </div>
+  <div class="search-bar"><input placeholder="搜索 SKU..." id="invSearch" oninput="renderInventory()"></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>SKU</th><th>产品名称</th><th>当前库存</th><th>在途</th><th>可销售</th><th>安全库存</th><th>状态</th><th>最近入库</th><th>最近出库</th><th>操作</th></tr></thead><tbody id="invTbody"></tbody></table></div>
+</div>
 
-  <!-- 知识库文件上传面板 -->
-  <div id="kb-modal" class="modal hidden">
-    <div class="sheet wide">
-      <div class="sheet-head">
-        <h3>📎 知识库文件</h3>
-        <button class="close-x" data-close="kb-modal">✕</button>
-      </div>
-      <div class="sheet-body">
-        <div id="kb-drop" class="kb-drop">
-          <div class="kb-drop-ic">📥</div>
-          <div class="kb-drop-txt">拖拽文件到此处，或 <label class="kb-link">点击选择<input id="kb-file" type="file" multiple accept=".pdf,.doc,.docx,.txt,.md,.markdown,.mp3,.wav,.m4a,.ogg,.mp4,.webm,.mov" hidden /></label></div>
-          <div class="kb-drop-hint">支持 PDF · Word(.docx) · TXT/MD 自动入库检索；音频/视频可 AI 转写或手动粘贴文本</div>
-        </div>
-        <div class="kb-stats"><span id="kb-stat" class="muted">0 个文件 · 0 段知识</span></div>
-        <ul id="kb-list" class="kb-list"></ul>
-      </div>
+<!-- ===== 入库管理 ===== -->
+<div class="page" id="page-receipts-in">
+  <div class="top"><div><h1>入库管理</h1></div><div class="top-r"><button class="btn btn-pri btn-sm" onclick="openReceiptInModal()">➕ 新增入库</button></div></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>日期</th><th>入库单号</th><th>供应商</th><th>SKU</th><th>数量</th><th>单价</th><th>金额</th><th>操作人</th><th>操作</th></tr></thead><tbody id="riTbody"></tbody></table></div>
+</div>
+
+<!-- ===== 出库管理 ===== -->
+<div class="page" id="page-receipts-out">
+  <div class="top"><div><h1>出库管理</h1></div><div class="top-r"><button class="btn btn-pri btn-sm" onclick="openReceiptOutModal()">➕ 新增出库</button></div></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>日期</th><th>出库单号</th><th>类型</th><th>SKU</th><th>数量</th><th>用途</th><th>操作人</th><th>操作</th></tr></thead><tbody id="roTbody"></tbody></table></div>
+</div>
+
+<!-- ===== 库存流水 ===== -->
+<div class="page" id="page-transactions">
+  <div class="top"><div><h1>库存流水</h1></div><div class="top-r"><button class="btn btn-sm" onclick="exportTransactions()">📥 导出</button></div></div>
+  <div class="search-bar">
+    <input type="date" id="txDateFrom" onchange="renderTransactions()">
+    <input type="date" id="txDateTo" onchange="renderTransactions()">
+    <input placeholder="SKU" id="txSku" oninput="renderTransactions()" style="min-width:100px;flex:none">
+    <select id="txType" onchange="renderTransactions()" style="padding:6px 10px;border:.5px solid var(--border);border-radius:var(--rs);font-size:12px">
+      <option value="">全部类型</option><option value="in">入库</option><option value="out">出库</option><option value="adjust">调整</option>
+    </select>
+  </div>
+  <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>时间</th><th>类型</th><th>SKU</th><th>产品</th><th>数量变化</th><th>来源</th><th>备注</th></tr></thead><tbody id="txTbody"></tbody></table></div>
+</div>
+
+<!-- ===== AI预测分析 ===== -->
+<div class="page" id="page-ai-forecast">
+  <div class="top"><div><h1>AI 库存预测</h1><div class="sub">基于历史销量自动分析缺货风险</div></div></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>SKU</th><th>产品名称</th><th>当前库存</th><th>近30天销量</th><th>日均销量</th><th>可售天数</th><th>采购周期</th><th>健康评分</th><th>AI判断</th></tr></thead><tbody id="aiTbody"></tbody></table></div>
+</div>
+
+<!-- ===== 采购建议中心 ===== -->
+<div class="page" id="page-purchase">
+  <div class="top"><div><h1>采购建议中心</h1><div class="sub">AI 自动排序，最急需的排最前面</div></div></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>优先级</th><th>SKU</th><th>产品名称</th><th>当前库存</th><th>日均销量</th><th>可售天数</th><th>建议采购</th><th>原因</th><th>操作</th></tr></thead><tbody id="purTbody"></tbody></table></div>
+</div>
+
+<!-- ===== 系统设置 ===== -->
+<div class="page" id="page-settings">
+  <div class="top"><div><h1>系统设置</h1></div></div>
+  <div class="card">
+    <div class="form-row">
+      <div class="form-group"><label>默认安全库存</label><input type="number" id="setSafety" value="10" onchange="saveSetting('safety_default',this.value)"></div>
+      <div class="form-group"><label>默认采购周期(天)</label><input type="number" id="setCycle" value="7" onchange="saveSetting('purchase_cycle_default',this.value)"></div>
+      <div class="form-group"><label>预测分析天数</label><input type="number" id="setPredDays" value="30" onchange="saveSetting('prediction_days',this.value)"></div>
     </div>
   </div>
+  <div class="card">
+    <div class="form-row">
+      <div class="form-group"><label>分类管理（逗号分隔）</label><input type="text" id="setCategories" value="龙头净水器,台下净水器,滤芯,配件" onchange="saveSetting('categories',this.value.split(',').map(s=>s.trim()))"></div>
+      <div class="form-group"><label>品牌管理（逗号分隔）</label><input type="text" id="setBrands" value="可菱水,3M,碧然德" onchange="saveSetting('brands',this.value.split(',').map(s=>s.trim()))"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;font-weight:500;margin-bottom:8px">数据管理</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-pri" onclick="exportAllData()">📥 导出全部数据</button>
+      <button class="btn btn-sm" onclick="document.getElementById('dataImport').click()">📤 导入数据</button>
+      <input type="file" id="dataImport" accept=".json" style="display:none" onchange="importAllData(this.files)">
+      <button class="btn btn-sm btn-red" onclick="if(confirm('确定清除所有数据？此操作不可撤销！')){try{localStorage.clear()}catch(e){}location.reload()}">🗑️ 清除数据</button>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;font-weight:500;margin-bottom:8px">账号管理</div>
+    <div style="font-size:13px;margin-bottom:12px">当前登录：<b id="setUser">—</b></div>
+    <div class="form-row">
+      <div class="form-group"><label>原密码</label><input type="password" id="oldPw" placeholder="输入当前密码" style="-webkit-appearance:none;appearance:none"></div>
+      <div class="form-group"><label>新密码</label><input type="password" id="newPw" placeholder="至少8位，含3类字符" style="-webkit-appearance:none;appearance:none"></div>
+    </div>
+    <div class="auth-err" id="pwErr" style="min-height:14px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-pri" onclick="changePw()">🔑 更新密码</button>
+      <button class="btn btn-sm btn-red" onclick="doLogout()">🚪 退出登录</button>
+    </div>
+  </div>
+</div>
 
-  <script src="js/config.js"></script>
-  <script src="js/knowledge.js"></script>
-  <script src="js/offline-engine.js"></script>
-  <script src="js/cases.js"></script>
-  <script src="js/uploads.js"></script>
-  <script src="js/app.js"></script>
+</div><!-- /main -->
+
+<!-- AI Copilot -->
+<div class="ai-copilot">
+  <button class="ai-copilot-btn" onclick="toggleCopilot()">💬</button>
+  <div class="ai-panel" id="aiPanel">
+    <div class="hdr"><span>🤖 AI 分析助手</span><button onclick="toggleCopilot()">✕</button></div>
+    <div class="msgs" id="aiMsgs"><div class="msg ai">你好，我是你的库存 AI 分析助手。可以问我：哪些产品快没货？今天建议采购什么？</div></div>
+    <div class="input-area"><input id="aiInput" placeholder="问一个问题..." onkeydown="if(event.key==='Enter')askAI()"><button onclick="askAI()">发送</button></div>
+  </div>
+</div>
+
+<!-- ===== Modals ===== -->
+<div class="modal-overlay" id="productModal"><div class="modal modal-xl">
+  <h2 id="prodModalTitle">新增产品</h2>
+  <div class="form-row">
+    <div class="form-group"><label>SKU *</label><input id="pSku"></div>
+    <div class="form-group"><label>产品型号</label><input id="pModel"></div>
+    <div class="form-group"><label>产品名称 *</label><input id="pName"></div>
+    <div class="form-group"><label>分类</label><select id="pCat"><option>龙头净水器</option><option>台下净水器</option><option>滤芯</option><option>配件</option></select></div>
+    <div class="form-group"><label>品牌</label><input id="pBrand" value="可菱水"></div>
+    <div class="form-group"><label>单位</label><select id="pUnit"><option>台</option><option>支</option><option>个</option><option>箱</option></select></div>
+    <div class="form-group"><label>当前库存</label><input type="number" id="pStock" value="0"></div>
+    <div class="form-group"><label>安全库存</label><input type="number" id="pSafety" value="10"></div>
+    <div class="form-group"><label>最大库存</label><input type="number" id="pMax" value="100"></div>
+    <div class="form-group"><label>建议采购周期(天)</label><input type="number" id="pCycle" value="7"></div>
+    <div class="form-group"><label>默认供应商</label><input id="pSupplier"></div>
+    <div class="form-group"><label>最近采购价格</label><input type="number" id="pLastPrice" value="0"></div>
+    <div class="form-group"><label>平均采购价格</label><input type="number" id="pAvgPrice" value="0"></div>
+  </div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('productModal')">取消</button><button class="btn btn-pri" onclick="saveProduct()">保存</button></div>
+</div></div>
+
+<div class="modal-overlay" id="adjustModal"><div class="modal">
+  <h2>库存调整</h2>
+  <div class="form-group"><label>SKU</label><select id="adjSku" style="width:100%"></select></div>
+  <div class="form-row">
+    <div class="form-group"><label>当前库存</label><input id="adjCur" disabled style="background:#f5f5f5"></div>
+    <div class="form-group"><label>调整后数量 *</label><input type="number" id="adjNew" min="0"></div>
+  </div>
+  <div class="form-group"><label>调整原因</label><input id="adjReason" placeholder="如：盘点差异、损耗报备..."></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('adjustModal')">取消</button><button class="btn btn-pri" onclick="saveAdjust()">确认调整</button></div>
+</div></div>
+
+<div class="modal-overlay" id="stocktakeModal"><div class="modal modal-xl">
+  <h2>库存盘点</h2>
+  <p style="font-size:12px;color:var(--sec);margin-bottom:10px">输入各 SKU 的实际盘点数量，差异将自动生成调整记录。</p>
+  <div id="stocktakeBody"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('stocktakeModal')">取消</button><button class="btn btn-pri" onclick="saveStocktake()">确认盘点</button></div>
+</div></div>
+
+<div class="modal-overlay" id="receiptInModal"><div class="modal modal-xl">
+  <h2>新增入库</h2>
+  <div class="form-row">
+    <div class="form-group"><label>入库日期</label><input type="date" id="riDate"></div>
+    <div class="form-group"><label>入库单号</label><input id="riOrder" placeholder="自动生成"></div>
+    <div class="form-group"><label>供应商</label><input id="riSupplier"></div>
+    <div class="form-group"><label>操作人</label><input id="riOperator"></div>
+  </div>
+  <div style="font-size:12px;font-weight:500;margin:8px 0">入库明细</div>
+  <div class="form-row">
+    <div class="form-group"><label>SKU</label><select id="riSku" style="width:100%"></select></div>
+    <div class="form-group"><label>数量</label><input type="number" id="riQty" min="1" value="1"></div>
+    <div class="form-group"><label>单价</label><input type="number" id="riPrice" value="0" step="0.01"></div>
+    <div style="display:flex;align-items:flex-end;margin-bottom:10px"><button class="btn btn-sm" onclick="addRiItem()">➕ 添加</button></div>
+  </div>
+  <div><table style="font-size:11px"><thead><tr><th>SKU</th><th>数量</th><th>单价</th><th>金额</th><th>操作</th></tr></thead><tbody id="riItemsBody"></tbody></table></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('receiptInModal')">取消</button><button class="btn btn-pri" onclick="saveReceiptIn()">确认入库</button></div>
+</div></div>
+
+<div class="modal-overlay" id="receiptOutModal"><div class="modal modal-xl">
+  <h2>新增出库</h2>
+  <div class="form-row">
+    <div class="form-group"><label>出库日期</label><input type="date" id="roDate"></div>
+    <div class="form-group"><label>出库单号</label><input id="roOrder" placeholder="自动生成"></div>
+    <div class="form-group"><label>出库类型</label><select id="roType"><option>销售出库</option><option>样品出库</option><option>损耗出库</option><option>其它出库</option></select></div>
+    <div class="form-group"><label>操作人</label><input id="roOperator"></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>SKU</label><select id="roSku" style="width:100%"></select></div>
+    <div class="form-group"><label>数量</label><input type="number" id="roQty" min="1" value="1"></div>
+    <div class="form-group"><label>用途/备注</label><input id="roNote"></div>
+  </div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('receiptOutModal')">取消</button><button class="btn btn-pri" onclick="saveReceiptOut()">确认出库</button></div>
+</div></div>
+
+<script>
+// ============================================================
+// DATA LAYER (localStorage)
+// ============================================================
+const DB = {
+  _ns(){const s=(typeof Auth!=='undefined'&&Auth.session&&Auth.session());return s&&s.username?'aisi_u_'+s.username+'_':'aisi_';},
+  get(k,def=null){try{const d=localStorage.getItem(this._ns()+k);return d?JSON.parse(d):def}catch{return def}},
+  set(k,v){try{localStorage.setItem(this._ns()+k,JSON.stringify(v))}catch(e){console.warn('localStorage set failed:',e)}},
+  genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)},
+  today(){return new Date().toISOString().slice(0,10)},
+  now(){return new Date().toISOString()}
+};
+
+// ============================================================
+// AUTH — 本地多账号（Web Crypto PBKDF2+盐；非安全上下文回退 SHA-256）
+// 仅本设备存储，无后端、无网络请求
+// ============================================================
+function sha256(str){str=unescape(encodeURIComponent(str));var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];var msg=[];for(var i=0;i<str.length;i++)msg.push(str.charCodeAt(i));msg.push(0x80);while(msg.length%64!=56)msg.push(0);var len=str.length*8;msg.push(0);msg.push(0);msg.push(0);msg.push(0);msg.push((len>>>24)&255);msg.push((len>>>16)&255);msg.push((len>>>8)&255);msg.push(len&255);for(var i=0;i<msg.length;i+=64){var w=new Array(64);for(var j=0;j<16;j++)w[j]=(msg[i+j*4]<<24)|(msg[i+j*4+1]<<16)|(msg[i+j*4+2]<<8)|msg[i+j*4+3];for(var j=16;j<64;j++){var s0=((w[j-15]>>>7)|(w[j-15]<<25))^((w[j-15]>>>18)|(w[j-15]<<14))^(w[j-15]>>>3);var s1=((w[j-2]>>>17)|(w[j-2]<<15))^((w[j-2]>>>19)|(w[j-2]<<13))^(w[j-2]>>>10);w[j]=(w[j-16]+s0+w[j-7]+s1)>>>0;}var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];for(var j=0;j<64;j++){var S1=((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7));var ch=(e&f)^((~e)&g);var t1=(h+S1+ch+K[j]+w[j])>>>0;var S0=((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10));var maj=(a&b)^(a&c)^(b&c);var t2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;}function hx(n){return('00000000'+(n>>>0).toString(16)).slice(-8);}return hx(H[0])+hx(H[1])+hx(H[2])+hx(H[3])+hx(H[4])+hx(H[5])+hx(H[6])+hx(H[7]);}
+
+const Auth={
+  KEY_ACCOUNTS:'aisi_accounts',KEY_SESSION:'aisi_session',KEY_SESSION_TEMP:'aisi_session_tmp',
+  SESSION_MS:1000*60*60*24*7,MAX_FAIL:5,LOCK_MS:1000*60*15,
+  _accounts(){try{return JSON.parse(localStorage.getItem(this.KEY_ACCOUNTS))||[]}catch{return[]}},
+  _save(a){try{localStorage.setItem(this.KEY_ACCOUNTS,JSON.stringify(a))}catch(e){}},
+  _salt(){const a=new Uint8Array(16);crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('')},
+  _tok(){const a=new Uint8Array(32);crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('')},
+  async _hash(pw,salt){const d=salt+':'+pw;if(window.crypto&&crypto.subtle){try{const enc=new TextEncoder();const key=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:enc.encode(salt),iterations:100000,hash:'SHA-256'},key,256);return Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join('');}catch(e){}}return sha256(d)},
+  validUser(u){return /^[a-zA-Z0-9_.@-]{3,30}$/.test(u)},
+  pwStrength(pw){let s=0;if(pw.length>=8)s++;if(/[a-z]/.test(pw)&&/[A-Z]/.test(pw))s++;if(/\d/.test(pw))s++;if(/[^a-zA-Z0-9]/.test(pw))s++;return s},
+  async register(u,pw,secQ,secA){u=(u||'').trim();if(!this.validUser(u))return{ok:false,msg:'用户名需为3-30位字母、数字或 . _ @ -'};if(this._accounts().some(a=>a.username.toLowerCase()===u.toLowerCase()))return{ok:false,msg:'该用户名已被注册'};if(this.pwStrength(pw)<3)return{ok:false,msg:'密码强度不足：至少8位，含大小写字母、数字、符号中至少3类'};if(!secQ||!secA)return{ok:false,msg:'请设置安全问题及答案，用于找回密码'};const salt=this._salt();const hash=await this._hash(pw,salt);const secAhash=sha256(salt+':'+secA.trim().toLowerCase());const a=this._accounts();a.push({username:u,salt,hash,secQ,secA:secAhash,created:Date.now(),fail:0,lockUntil:0});this._save(a);return{ok:true}},
+  async login(u,pw,remember){u=(u||'').trim();const a=this._accounts();const acc=a.find(x=>x.username.toLowerCase()===u.toLowerCase());const now=Date.now();if(acc&&acc.lockUntil>now)return{ok:false,msg:'账号已锁定，请于 '+new Date(acc.lockUntil).toLocaleTimeString()+' 后重试'};if(!acc)return{ok:false,msg:'用户名或密码错误'};const hash=await this._hash(pw,acc.salt);if(hash!==acc.hash){acc.fail=(acc.fail||0)+1;if(acc.fail>=this.MAX_FAIL){acc.lockUntil=now+this.LOCK_MS;acc.fail=0;}this._save(a);if(acc.lockUntil>now)return{ok:false,msg:'失败次数过多，账号已锁定15分钟'};return{ok:false,msg:'用户名或密码错误'};}acc.fail=0;acc.lockUntil=0;acc.lastLogin=now;this._save(a);const sess={username:acc.username,token:this._tok(),expires:now+this.SESSION_MS};try{if(remember){localStorage.setItem(this.KEY_SESSION,JSON.stringify(sess));try{sessionStorage.removeItem(this.KEY_SESSION_TEMP)}catch(e){}}else{sessionStorage.setItem(this.KEY_SESSION_TEMP,JSON.stringify(sess));try{localStorage.removeItem(this.KEY_SESSION)}catch(e){}}}catch(e){}return{ok:true,username:acc.username}},
+  logout(){try{localStorage.removeItem(this.KEY_SESSION);sessionStorage.removeItem(this.KEY_SESSION_TEMP)}catch(e){}},
+  session(){try{const s=JSON.parse(localStorage.getItem(this.KEY_SESSION));if(s&&s.expires>Date.now())return s}catch{}try{const s=JSON.parse(sessionStorage.getItem(this.KEY_SESSION_TEMP));if(s&&s.expires>Date.now())return s}catch{}return null},
+  isAuthed(){return!!this.session()},
+  async changePw(oldPw,newPw){const s=this.session();if(!s)return{ok:false,msg:'未登录'};const a=this._accounts();const acc=a.find(x=>x.username===s.username);if(!acc)return{ok:false,msg:'账号不存在'};const h=await this._hash(oldPw,acc.salt);if(h!==acc.hash)return{ok:false,msg:'原密码错误'};if(this.pwStrength(newPw)<3)return{ok:false,msg:'新密码强度不足'};acc.salt=this._salt();acc.hash=await this._hash(newPw,acc.salt);this._save(a);return{ok:true}},
+  recoverStart(u){u=(u||'').trim();const acc=this._accounts().find(x=>x.username.toLowerCase()===u.toLowerCase());if(!acc||!acc.secQ)return null;return acc.secQ;},
+  async recoverFinish(u,ans,newPw){u=(u||'').trim();if(this.pwStrength(newPw)<3)return{ok:false,msg:'新密码强度不足：至少8位，含大小写字母、数字、符号中至少3类'};const a=this._accounts();const acc=a.find(x=>x.username.toLowerCase()===u.toLowerCase());if(!acc||!acc.secQ)return{ok:false,msg:'账号不存在或安全问题未设置'};const ah=sha256(acc.salt+':'+ans.trim().toLowerCase());if(ah!==acc.secA)return{ok:false,msg:'安全问题答案错误'};acc.salt=this._salt();acc.hash=await this._hash(newPw,acc.salt);acc.fail=0;acc.lockUntil=0;this._save(a);return{ok:true}}
+};
+
+function initData(){
+  if(!DB.get('products')) DB.set('products',[
+    {id:'p1',sku:'CB013',name:'龙头净水器CB013',model:'CB013',cat:'龙头净水器',brand:'可菱水',unit:'台',stock:8,safety:20,max:100,cycle:5,supplier:'三菱化学',lastPrice:320,avgPrice:315,created:DB.today(),updated:DB.today()},
+    {id:'p2',sku:'CSP901',name:'台下净水器CSP901',model:'CSP901',cat:'台下净水器',brand:'可菱水',unit:'台',stock:3,safety:15,max:60,cycle:7,supplier:'三菱化学',lastPrice:580,avgPrice:560,created:DB.today(),updated:DB.today()},
+    {id:'p3',sku:'UZC2000',name:'台下型滤芯UZC2000',model:'UZC2000',cat:'滤芯',brand:'可菱水',unit:'支',stock:35,safety:50,max:200,cycle:15,supplier:'三菱化学',lastPrice:120,avgPrice:115,created:DB.today(),updated:DB.today()},
+    {id:'p4',sku:'CBC03W',name:'龙头型滤芯CBC03W',model:'CBC03W',cat:'滤芯',brand:'可菱水',unit:'支',stock:42,safety:80,max:300,cycle:10,supplier:'三菱化学',lastPrice:85,avgPrice:80,created:DB.today(),updated:DB.today()},
+    {id:'p5',sku:'CP407',name:'滤水杯CP407',model:'CP407',cat:'配件',brand:'可菱水',unit:'个',stock:18,safety:10,max:50,cycle:7,supplier:'三菱化学',lastPrice:150,avgPrice:145,created:DB.today(),updated:DB.today()},
+    {id:'p6',sku:'CG104',name:'龙头净水器CG104',model:'CG104',cat:'龙头净水器',brand:'可菱水',unit:'台',stock:25,safety:30,max:80,cycle:7,supplier:'三菱化学',lastPrice:280,avgPrice:270,created:DB.today(),updated:DB.today()}
+  ]);
+  if(!DB.get('transactions')) DB.set('transactions',[]);
+  if(!DB.get('settings')) DB.set('settings',{safety_default:10,purchase_cycle_default:7,prediction_days:30,categories:['龙头净水器','台下净水器','滤芯','配件'],brands:['可菱水','3M','碧然德']});
+  DB.set('initialized',true);
+}
+
+function getProducts(){return DB.get('products',[])}
+function saveProducts(p){DB.set('products',p)}
+function getTx(){return DB.get('transactions',[])}
+function addTx(t){const tx=getTx();tx.unshift({id:DB.genId(),created:DB.now(),...t});DB.set('transactions',tx)}
+function getSettings(){return DB.get('settings',{safety_default:10,purchase_cycle_default:7,prediction_days:30,categories:[],brands:[]})}
+function saveSettings(s){DB.set('settings',s)}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+let currentPage='dashboard';
+
+function goPage(page){
+  currentPage=page;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===page));
+  syncTabbar();
+  renderPage(page);
+  if(page==='settings')renderSettingsAccount();
+  if(page==='dashboard')requestAnimationFrame(()=>setTimeout(resizeCharts,80));
+}
+function syncTabbar(){
+  document.querySelectorAll('.mobile-tabbar .tab').forEach(n=>n.classList.toggle('active',n.dataset.page===currentPage));
+}
+function wrapTables(){
+  document.querySelectorAll('table').forEach(tb=>{
+    if(tb.parentElement && tb.parentElement.classList.contains('table-scroll'))return;
+    const w=document.createElement('div');w.className='table-scroll';
+    tb.parentNode.insertBefore(w,tb);w.appendChild(tb);
+  });
+}
+
+function renderPage(page){
+  switch(page){
+    case'dashboard':refreshDashboard();break;
+    case'products':renderProducts();break;
+    case'inventory':renderInventory();break;
+    case'receipts-in':renderReceiptsIn();break;
+    case'receipts-out':renderReceiptsOut();break;
+    case'transactions':renderTransactions();break;
+    case'ai-forecast':renderAIForecast();break;
+    case'purchase':renderPurchase();break;
+    case'settings':renderSettings();break;
+  }
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+let trendChart=null,pieChart=null,safetyChart=null;
+try{Chart.defaults.devicePixelRatio=window.devicePixelRatio||1;Chart.defaults.font.family='-apple-system,BlinkMacSystemFont,sans-serif';}catch(e){}
+function resizeCharts(){[trendChart,pieChart,safetyChart].forEach(c=>{try{if(c&&c.resize)c.resize()}catch(e){}});}
+window.addEventListener('resize',resizeCharts);
+window.addEventListener('pageshow',resizeCharts);
+
+function refreshDashboard(){
+  const p=getProducts(),t=getTx(),s=getSettings();
+  const total=p.length, totalStock=p.reduce((a,b)=>a+(b.stock||0),0);
+  const totalValue=p.reduce((a,b)=>a+(b.stock||0)*(b.avgPrice||0),0);
+  const alerts=p.filter(x=>(x.stock||0)<(x.safety||0)).length;
+  const today=t.filter(x=>x.created&&x.created.slice(0,10)===DB.today());
+  const todayIn=today.filter(x=>x.type==='in').reduce((a,b)=>a+(b.qty||0),0);
+  const todayOut=today.filter(x=>x.type==='out').reduce((a,b)=>a+(b.qty||0),0);
+  const predDays=s.prediction_days||30;
+  const cycleDefault=s.purchase_cycle_default||7;
+
+  let nearOut=0,suggestTotal=0;
+  p.forEach(prod=>{
+    const sales30=getSales30(prod.sku,predDays);
+    const daily=sales30/predDays;
+    const days=daily>0?(prod.stock||0)/daily:999;
+    if(days<cycleDefault)nearOut++;
+    if(days<cycleDefault)suggestTotal+=Math.ceil((cycleDefault*daily*1.5)-(prod.stock||0));
+  });
+
+  document.getElementById('dashSub').textContent='更新于 '+new Date().toLocaleTimeString('zh-CN');
+  document.getElementById('kpiGrid').innerHTML=`
+    <div class="kpi blue"><div class="l">SKU 总数</div><div class="v">${total}</div><div class="s">${p.filter(x=>x.stock>0).length} 个有库存</div></div>
+    <div class="kpi green"><div class="l">库存数量</div><div class="v">${totalStock}</div><div class="s">金额 ¥${totalValue.toFixed(0)}</div></div>
+    <div class="kpi blue"><div class="l">安全库存预警</div><div class="v ${alerts?'red':''}">${alerts}</div><div class="s">${alerts?'需立即关注':'状态良好'}</div></div>
+    <div class="kpi amber"><div class="l">即将缺货</div><div class="v amber">${nearOut}</div><div class="s">${nearOut?'建议今日采购':'库存充足'}</div></div>
+    <div class="kpi green"><div class="l">今日入库</div><div class="v green">${todayIn}</div><div class="s">${t.length} 笔流水</div></div>
+    <div class="kpi red"><div class="l">今日出库</div><div class="v">${todayOut}</div><div class="s">净变动 ${todayIn-todayOut}</div></div>
+    <div class="kpi blue"><div class="l">建议采购量</div><div class="v">${suggestTotal}</div><div class="s">涉及 ${nearOut} 个 SKU</div></div>
+  `;
+
+  // AI Summary
+  const health=total>0?Math.round((1-alerts/total)*100):100;
+  const low=p.filter(x=>(x.stock||0)<(x.safety||0)).slice(0,5);
+  const sug=p.filter(x=>{const d=getSales30(x.sku,predDays)/predDays;return d>0&&((x.stock||0)/d)<cycleDefault}).slice(0,3);
+  document.getElementById('aiSummaryText').innerHTML=
+    `<strong>AI 今日分析</strong> — 库存健康度：<strong>${health}%</strong>。<br>
+    共有 <strong>${alerts}</strong> 个 SKU 库存不足（低于安全线），<strong>${nearOut}</strong> 个即将缺货。
+    ${sug.length>0?'建议今日采购：<br>'+sug.map(s=>'• <strong>'+s.sku+'</strong> ×'+Math.ceil((cycleDefault*(getSales30(s.sku,predDays)/predDays)*1.5)-(s.stock||0))+'（库存 '+s.stock+'，日均 '+(getSales30(s.sku,predDays)/predDays).toFixed(1)+'）').join('<br>')+'<br>预计未来 3 天不会出现断货。':'<br>当前库存状态良好。'}`;
+
+  // Charts
+  renderTrendChart(t,predDays);
+  renderPieChart(p);
+  renderSafetyChart(p);
+  requestAnimationFrame(()=>setTimeout(resizeCharts,80));
+}
+
+function getSales30(sku,days){
+  const t=getTx().filter(x=>x.sku===sku&&x.type==='out');
+  const cut=new Date(Date.now()-days*86400000);
+  return t.filter(x=>new Date(x.created)>cut).reduce((a,b)=>a+(b.qty||0),0);
+}
+
+function renderTrendChart(tx,predDays){
+  if(trendChart)trendChart.destroy();
+  const days=[],data=[];
+  for(let i=predDays-1;i>=0;i--){
+    const d=new Date(Date.now()-i*86400000).toISOString().slice(0,10);
+    days.push(d.slice(5));
+    data.push(tx.filter(x=>x.created&&x.created.slice(0,10)===d&&x.type==='out').reduce((a,b)=>a+(b.qty||0),0));
+  }
+  trendChart=new Chart(document.getElementById('trendChart'),{type:'line',data:{labels:days,datasets:[{label:'出库',data,borderColor:'#0ca497',backgroundColor:'rgba(12,164,151,.14)',fill:true,tension:.3,pointRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},maxTicksLimit:10},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,.04)'}}}}});
+}
+
+function renderPieChart(p){
+  if(pieChart)pieChart.destroy();
+  const cats={};p.forEach(x=>{const c=x.cat||'未分类';cats[c]=(cats[c]||0)+(x.stock||0)});
+  const labels=Object.keys(cats),values=Object.values(cats);
+  const colors=['#0ca497','#1f9e6e','#e0a23c','#e25c4b','#7c6bd6','#5b7780'];
+  pieChart=new Chart(document.getElementById('pieChart'),{type:'doughnut',data:{labels,datasets:[{data:values,backgroundColor:colors.slice(0,labels.length),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10,padding:6}}}}});
+}
+
+function renderSafetyChart(p){
+  if(safetyChart)safetyChart.destroy();
+  const green=p.filter(x=>(x.stock||0)>(x.safety||0)*1.2).length;
+  const yellow=p.filter(x=>(x.stock||0)>=(x.safety||0)&&(x.stock||0)<=(x.safety||0)*1.2).length;
+  const red=p.filter(x=>(x.stock||0)<(x.safety||0)).length;
+  safetyChart=new Chart(document.getElementById('safetyChart'),{type:'bar',data:{labels:['充足','偏低','缺货'],datasets:[{data:[green,yellow,red],backgroundColor:['#1f9e6e','#e0a23c','#e25c4b'],borderRadius:3,barThickness:36}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,.04)'}},y:{ticks:{font:{size:10}},grid:{display:false}}}}});
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+let editingProductId=null;
+
+function renderProducts(){
+  const p=getProducts(),q=document.getElementById('prodSearch').value.toLowerCase();
+  const cat=document.getElementById('prodCatFilter').value;
+  const s=getSettings();
+  const cats=s.categories||[];
+  const sel=document.getElementById('prodCatFilter');
+  sel.innerHTML='<option value="">全部分类</option>'+cats.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('');
+  const filtered=p.filter(x=>(x.sku.toLowerCase().includes(q)||x.name.toLowerCase().includes(q))&&(!cat||x.cat===cat));
+  document.getElementById('prodTbody').innerHTML=filtered.length?filtered.map(x=>`<tr>
+    <td class="name">${x.sku}</td><td>${x.name}</td><td>${x.cat||'-'}</td><td>${x.brand||'-'}</td>
+    <td class="num mono ${(x.stock||0)<(x.safety||0)?'':''}">${x.stock||0}</td>
+    <td class="num mono">${x.safety||0}</td><td class="num mono">${x.cycle||'-'}</td>
+    <td class="num mono">¥${(x.lastPrice||0).toFixed(0)}</td>
+    <td class="num mono">¥${((x.stock||0)*(x.avgPrice||0)).toFixed(0)}</td>
+    <td><button class="btn btn-sm" onclick="openProductModal('${x.id}')">编辑</button> <button class="btn btn-sm btn-red" onclick="deleteProduct('${x.id}')">删除</button></td>
+  </tr>`).join(''):'<tr><td colspan="10"><div class="empty-state">暂无产品数据</div></td></tr>';
+}
+
+function openProductModal(id=null){
+  editingProductId=id;
+  const f=x=>document.getElementById(x);
+  const p=id?getProducts().find(x=>x.id===id):null;
+  f('prodModalTitle').textContent=p?'编辑产品':'新增产品';
+  f('pSku').value=p?p.sku:'';f('pSku').disabled=!!p;
+  f('pModel').value=p?p.model||'':'';
+  f('pName').value=p?p.name:'';
+  f('pCat').value=p?p.cat||'龙头净水器':'龙头净水器';
+  f('pBrand').value=p?p.brand||'可菱水':'可菱水';
+  f('pUnit').value=p?p.unit||'台':'台';
+  f('pStock').value=p?p.stock||0:0;
+  f('pSafety').value=p?p.safety||10:10;
+  f('pMax').value=p?p.max||100:100;
+  f('pCycle').value=p?p.cycle||7:7;
+  f('pSupplier').value=p?p.supplier||'':'';
+  f('pLastPrice').value=p?p.lastPrice||0:0;
+  f('pAvgPrice').value=p?p.avgPrice||0:0;
+  openModal('productModal');
+}
+
+function saveProduct(){
+  const f=x=>document.getElementById(x).value;
+  const p=getProducts();
+  if(editingProductId){
+    const idx=p.findIndex(x=>x.id===editingProductId);
+    if(idx>=0){Object.assign(p[idx],{model:f('pModel'),name:f('pName'),cat:f('pCat'),brand:f('pBrand'),unit:f('pUnit'),stock:Number(f('pStock')),safety:Number(f('pSafety')),max:Number(f('pMax')),cycle:Number(f('pCycle')),supplier:f('pSupplier'),lastPrice:Number(f('pLastPrice')),avgPrice:Number(f('pAvgPrice')),updated:DB.today()});}
+  }else{
+    if(!f('pSku')||!f('pName')){alert('SKU和产品名称为必填');return}
+    if(p.find(x=>x.sku===f('pSku'))){alert('SKU已存在');return}
+    p.push({id:DB.genId(),sku:f('pSku'),model:f('pModel'),name:f('pName'),cat:f('pCat'),brand:f('pBrand'),unit:f('pUnit'),stock:Number(f('pStock')),safety:Number(f('pSafety')),max:Number(f('pMax')),cycle:Number(f('pCycle')),supplier:f('pSupplier'),lastPrice:Number(f('pLastPrice')),avgPrice:Number(f('pAvgPrice')),created:DB.today(),updated:DB.today()});
+  }
+  saveProducts(p);
+  closeModal('productModal');
+  renderProducts();
+}
+
+function deleteProduct(id){if(!confirm('确定删除此产品？'))return;saveProducts(getProducts().filter(x=>x.id!==id));renderProducts()}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+function renderInventory(){
+  const p=getProducts(),q=document.getElementById('invSearch').value.toLowerCase();
+  const f=p.filter(x=>x.sku.toLowerCase().includes(q)||x.name.toLowerCase().includes(q));
+  document.getElementById('invTbody').innerHTML=f.length?f.map(x=>{
+    const st=x.stock||0,saf=x.safety||0;
+    const status=st<=0?'无库存':st<saf?'缺货':st<=saf*1.2?'偏低':'正常';
+    const cls=st<=0?'gray':st<saf?'red':st<=saf*1.2?'yellow':'green';
+    const lastIn=getTx().find(t=>t.sku===x.sku&&t.type==='in');
+    const lastOut=getTx().find(t=>t.sku===x.sku&&t.type==='out');
+    return `<tr>
+      <td class="name">${x.sku}</td><td>${x.name}</td>
+      <td class="num mono ${st<saf?'':'red'}">${st}</td><td class="num mono">0</td>
+      <td class="num mono">${st}</td><td class="num mono">${saf}</td>
+      <td><span class="badge ${cls}">${status}</span></td>
+      <td class="mono" style="font-size:11px">${lastIn?lastIn.created.slice(0,10):'-'}</td>
+      <td class="mono" style="font-size:11px">${lastOut?lastOut.created.slice(0,10):'-'}</td>
+      <td><button class="btn btn-sm" onclick="openAdjustModal('${x.sku}')">调整</button> <button class="btn btn-sm" onclick="freezeProduct('${x.id}')">冻结</button></td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="10"><div class="empty-state">暂无数据</div></td></tr>';
+}
+
+function openAdjustModal(sku=''){
+  const p=getProducts();
+  const sel=document.getElementById('adjSku');
+  sel.innerHTML=p.map(x=>`<option value="${x.sku}" ${x.sku===sku?'selected':''}>${x.sku} ${x.name}</option>`).join('');
+  sel.onchange=()=>{const prod=p.find(x=>x.sku===sel.value);document.getElementById('adjCur').value=prod?prod.stock||0:0};
+  sel.onchange();
+  document.getElementById('adjNew').value='';
+  document.getElementById('adjReason').value='';
+  openModal('adjustModal');
+}
+
+function saveAdjust(){
+  const sku=document.getElementById('adjSku').value;
+  const newQty=Number(document.getElementById('adjNew').value);
+  const reason=document.getElementById('adjReason').value||'手动调整';
+  if(isNaN(newQty)||newQty<0){alert('请输入有效数量');return}
+  const p=getProducts(),prod=p.find(x=>x.sku===sku);
+  if(!prod)return;
+  const oldQty=prod.stock||0;
+  prod.stock=newQty;
+  prod.updated=DB.today();
+  saveProducts(p);
+  addTx({type:'adjust',sku,qty:newQty-oldQty,source:reason,note:'调整: '+oldQty+'→'+newQty,operator:'管理员'});
+  closeModal('adjustModal');
+  renderInventory();refreshDashboard();
+}
+
+function freezeProduct(id){
+  const p=getProducts(),prod=p.find(x=>x.id===id);
+  if(!prod)return;
+  alert('已预留/冻结功能示意：'+prod.sku+' 当前库存 '+prod.stock+' 已标记。（V1.0为示意实现）');
+}
+
+// ============================================================
+// STOCKTAKE
+// ============================================================
+let stocktakeData=[];
+
+function openStocktakeModal(){
+  const p=getProducts();
+  stocktakeData=p.map(x=>({id:x.id,sku:x.sku,name:x.name,current:x.stock||0,actual:x.stock||0,checked:false}));
+  document.getElementById('stocktakeBody').innerHTML=stocktakeData.map(x=>
+    `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:.5px solid var(--border);font-size:12px">
+      <input type="checkbox" onchange="stocktakeData.find(s=>s.id=='${x.id}').checked=this.checked">
+      <span style="min-width:80px;font-weight:500">${x.sku}</span>
+      <span style="min-width:120px;color:var(--sec)">${x.name}</span>
+      <span style="min-width:60px;color:var(--mut)">当前: ${x.current}</span>
+      <input type="number" value="${x.actual}" style="width:80px;padding:4px 6px;border:.5px solid var(--border);border-radius:4px;font-size:12px"
+        onchange="stocktakeData.find(s=>s.id=='${x.id}').actual=Number(this.value)">
+    </div>`
+  ).join('');
+  openModal('stocktakeModal');
+}
+
+function saveStocktake(){
+  let changes=0;
+  stocktakeData.forEach(x=>{
+    if(x.checked&&x.actual!==x.current){
+      const p=getProducts(),prod=p.find(s=>s.id===x.id);
+      if(prod){prod.stock=x.actual;changes++}
+    }
+  });
+  if(changes>0){saveProducts(getProducts());addTx({type:'adjust',sku:'盘点',qty:0,source:'盘点',note:changes+'个SKU已更新',operator:'管理员'});}
+  closeModal('stocktakeModal');
+  alert('盘点完成，'+changes+'个SKU已更新');
+  renderInventory();refreshDashboard();
+}
+
+// ============================================================
+// RECEIPTS IN
+// ============================================================
+let riItems=[];
+
+function renderReceiptsIn(){
+  const t=getTx().filter(x=>x.type==='in').slice(0,100);
+  document.getElementById('riTbody').innerHTML=t.length?t.map(x=>`<tr>
+    <td class="mono">${x.created.slice(0,10)}</td><td>${x.source||'-'}</td><td>${x.operator||'-'}</td>
+    <td class="name">${x.sku}</td><td class="num mono green">+${x.qty}</td>
+    <td class="num mono">-</td><td class="num mono">-</td><td>${x.operator||'-'}</td>
+    <td><button class="btn btn-sm btn-red" onclick="if(confirm('确定删除？')){DB.set('transactions',getTx().filter(t=>t.id!=='${x.id}'));renderReceiptsIn()}">删除</button></td>
+  </tr>`).join(''):'<tr><td colspan="9"><div class="empty-state">暂无入库记录</div></td></tr>';
+}
+
+function openReceiptInModal(){
+  const p=getProducts();
+  document.getElementById('riDate').value=DB.today();
+  document.getElementById('riOrder').value='IN-'+Date.now().toString(36).toUpperCase();
+  document.getElementById('riSupplier').value='';
+  document.getElementById('riOperator').value='管理员';
+  const sel=document.getElementById('riSku');
+  sel.innerHTML=p.map(x=>`<option value="${x.sku}">${x.sku} ${x.name}</option>`).join('');
+  document.getElementById('riQty').value=1;
+  document.getElementById('riPrice').value=0;
+  riItems=[];
+  renderRiItems();
+  openModal('receiptInModal');
+}
+
+function addRiItem(){
+  const sku=document.getElementById('riSku').value;
+  const qty=Number(document.getElementById('riQty').value);
+  const price=Number(document.getElementById('riPrice').value);
+  if(!qty||qty<1)return;
+  const exist=riItems.find(x=>x.sku===sku);
+  if(exist){exist.qty+=qty;exist.price=price}else riItems.push({sku,qty,price});
+  renderRiItems();
+}
+
+function renderRiItems(){
+  const sum=riItems.reduce((a,b)=>a+b.qty*b.price,0);
+  document.getElementById('riItemsBody').innerHTML=riItems.map((x,i)=>`<tr><td>${x.sku}</td><td class="num">${x.qty}</td><td class="num">${x.price}</td><td class="num">${(x.qty*x.price).toFixed(0)}</td><td><button class="btn btn-sm" onclick="riItems.splice(${i},1);renderRiItems()">✕</button></td></tr>`).join('')
+    +`<tr style="font-weight:500;background:#f8f9fa"><td colspan="3">合计</td><td class="num">${sum.toFixed(0)}</td><td></td></tr>`;
+}
+
+function saveReceiptIn(){
+  if(!riItems.length){alert('请至少添加一个SKU');return}
+  const date=document.getElementById('riDate').value,order=document.getElementById('riOrder').value;
+  const sup=document.getElementById('riSupplier').value,op=document.getElementById('riOperator').value||'管理员';
+  const p=getProducts();
+  riItems.forEach(x=>{
+    const prod=p.find(s=>s.sku===x.sku);
+    if(prod){prod.stock=(prod.stock||0)+x.qty;if(x.price>0)prod.lastPrice=x.price}
+    addTx({type:'in',sku:x.sku,qty:x.qty,source:'入库单: '+order,operator:op,note:'供应商: '+sup});
+  });
+  saveProducts(p);
+  closeModal('receiptInModal');
+  renderReceiptsIn();refreshDashboard();
+}
+
+// ============================================================
+// RECEIPTS OUT
+// ============================================================
+function renderReceiptsOut(){
+  const t=getTx().filter(x=>x.type==='out').slice(0,100);
+  document.getElementById('roTbody').innerHTML=t.length?t.map(x=>`<tr>
+    <td class="mono">${x.created.slice(0,10)}</td><td>${x.source||'-'}</td><td>${x.operator||'-'}</td>
+    <td class="name">${x.sku}</td><td class="num mono red">-${x.qty}</td>
+    <td>${x.note||'-'}</td><td>${x.operator||'-'}</td>
+    <td><button class="btn btn-sm btn-red" onclick="if(confirm('确定删除？')){DB.set('transactions',getTx().filter(t=>t.id!=='${x.id}'));renderReceiptsOut();recalcStock()}">删除</button></td>
+  </tr>`).join(''):'<tr><td colspan="8"><div class="empty-state">暂无出库记录</div></td></tr>';
+}
+
+function openReceiptOutModal(){
+  document.getElementById('roDate').value=DB.today();
+  document.getElementById('roOrder').value='OUT-'+Date.now().toString(36).toUpperCase();
+  document.getElementById('roType').value='销售出库';
+  document.getElementById('roOperator').value='管理员';
+  const sel=document.getElementById('roSku');
+  sel.innerHTML=getProducts().map(x=>`<option value="${x.sku}">${x.sku} ${x.name} (库存:${x.stock})</option>`).join('');
+  document.getElementById('roQty').value=1;
+  document.getElementById('roNote').value='';
+  openModal('receiptOutModal');
+}
+
+function saveReceiptOut(){
+  const sku=document.getElementById('roSku').value;
+  const qty=Number(document.getElementById('roQty').value);
+  const type=document.getElementById('roType').value;
+  const note=document.getElementById('roNote').value||type;
+  const op=document.getElementById('roOperator').value||'管理员';
+  if(!qty||qty<1){alert('请输入有效数量');return}
+  const p=getProducts(),prod=p.find(x=>x.sku===sku);
+  if(prod&&(prod.stock||0)<qty){alert('库存不足！当前库存: '+(prod.stock||0));return}
+  if(prod)prod.stock=(prod.stock||0)-qty;
+  addTx({type:'out',sku,qty,source:type,operator:op,note});
+  saveProducts(p);
+  closeModal('receiptOutModal');
+  renderReceiptsOut();refreshDashboard();
+}
+
+function recalcStock(){
+  // Recalculate all stock from transactions (for data integrity)
+  const p=getProducts(),tx=getTx();
+  p.forEach(prod=>{
+    prod.stock=0;
+    tx.filter(t=>t.sku===prod.sku).forEach(t=>{
+      if(t.type==='in')prod.stock+=t.qty;
+      else if(t.type==='out')prod.stock-=t.qty;
+    });
+  });
+  saveProducts(p);
+}
+
+// ============================================================
+// TRANSACTIONS
+// ============================================================
+function renderTransactions(){
+  let t=getTx();
+  const from=document.getElementById('txDateFrom').value;
+  const to=document.getElementById('txDateTo').value;
+  const sku=document.getElementById('txSku').value.toLowerCase();
+  const type=document.getElementById('txType').value;
+  if(from)t=t.filter(x=>x.created>=from);
+  if(to)t=t.filter(x=>x.created.slice(0,10)<=to);
+  if(sku)t=t.filter(x=>x.sku.toLowerCase().includes(sku));
+  if(type)t=t.filter(x=>x.type===type);
+  document.getElementById('txTbody').innerHTML=t.slice(0,200).map(x=>{
+    const p=getProducts().find(s=>s.sku===x.sku);
+    const sign=x.type==='in'?'+':(x.type==='out'?'-':'±');
+    const cls=x.type==='in'?'green':x.type==='out'?'red':'amber';
+    return `<tr>
+      <td class="mono">${x.created.slice(0,16).replace('T',' ')}</td>
+      <td><span class="badge ${cls}">${x.type==='in'?'入库':x.type==='out'?'出库':'调整'}</span></td>
+      <td class="name">${x.sku}</td>
+      <td>${p?p.name:'-'}</td>
+      <td class="num mono" style="color:var(--${cls})">${sign}${x.qty}</td>
+      <td>${x.source||'-'}</td>
+      <td style="color:var(--sec);font-size:11px">${x.note||'-'}</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="7"><div class="empty-state">暂无流水记录</div></td></tr>';
+}
+
+// ============================================================
+// AI FORECAST
+// ============================================================
+function renderAIForecast(){
+  const p=getProducts(),s=getSettings(),pd=s.prediction_days||30,cd=s.purchase_cycle_default||7;
+  document.getElementById('aiTbody').innerHTML=p.map(x=>{
+    const sales30=getSales30(x.sku,pd);
+    const daily=sales30/pd;
+    const days=daily>0?(x.stock||0)/daily:999;
+    const score=Math.min(100,Math.round(days/((x.cycle||cd)*1.5)*100));
+    const status=days<1?'🔴 已断货':days<(x.cycle||cd)?'⚠️ 即将缺货':days<(x.cycle||cd)*2?'🟡 偏低':'🟢 正常';
+    return `<tr>
+      <td class="name">${x.sku}</td><td>${x.name}</td>
+      <td class="num mono">${x.stock||0}</td><td class="num mono">${sales30}</td>
+      <td class="num mono">${daily.toFixed(1)}</td>
+      <td class="num mono ${days<(x.cycle||cd)?'red':''}">${days<999?days.toFixed(1):'∞'}</td>
+      <td class="num mono">${x.cycle||cd}</td>
+      <td class="num mono" style="font-weight:500;color:${score<50?'var(--red)':score<75?'var(--amber)':'var(--green)'}">${score}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// PURCHASE CENTER
+// ============================================================
+function renderPurchase(){
+  const p=getProducts(),s=getSettings(),pd=s.prediction_days||30,cd=s.purchase_cycle_default||7;
+  const items=p.map(x=>{
+    const sales30=getSales30(x.sku,pd);
+    const daily=sales30/pd;
+    const days=daily>0?(x.stock||0)/daily:999;
+    const need=days<(x.cycle||cd);
+    const suggest=need?Math.ceil(((x.cycle||cd)*daily*1.5)-(x.stock||0)):0;
+    const stars=days<=1?5:days<=(x.cycle||cd)?4:days<=(x.cycle||cd)*1.5?3:days<=(x.cycle||cd)*2?2:1;
+    const reason=days<=1?'已断货，紧急采购':days<(x.cycle||cd)?`预计${days.toFixed(0)}天内售空。采购周期${x.cycle||cd}天，建议今天采购。`:'库存充足';
+    return{sku:x.sku,name:x.name,stock:x.stock||0,daily,days,suggest,stars,reason,need};
+  }).filter(x=>x.need).sort((a,b)=>a.days-b.days||b.stars-a.stars);
+
+  document.getElementById('purTbody').innerHTML=items.length?items.map((x,i)=>`<tr>
+    <td><span class="badge ${i===0?'red':i<=2?'yellow':'blue'}" style="font-size:13px;font-weight:600">${'★'.repeat(x.stars)}${'☆'.repeat(5-x.stars)}</span></td>
+    <td class="name">${x.sku}</td><td>${x.name}</td>
+    <td class="num mono ${x.stock<10?'red':''}">${x.stock}</td>
+    <td class="num mono">${x.daily.toFixed(1)}</td>
+    <td class="num mono red">${x.days<999?x.days.toFixed(1):'∞'}</td>
+    <td class="num mono" style="font-weight:500;color:var(--blue)">${x.suggest}</td>
+    <td style="font-size:11px;color:var(--sec);max-width:200px;overflow:hidden;text-overflow:ellipsis">${x.reason}</td>
+    <td><button class="btn btn-sm btn-pri" onclick="quickPurchase('${x.sku}',${x.suggest})">采购</button></td>
+  </tr>`).join(''):'<tr><td colspan="9"><div class="empty-state">✅ 所有 SKU 库存充足，暂无采购建议</div></td></tr>';
+}
+
+function quickPurchase(sku,qty){
+  if(!qty||qty<=0){alert('无需采购');return}
+  document.getElementById('roDate').value=DB.today();
+  document.getElementById('roOrder').value='PUR-'+Date.now().toString(36).toUpperCase();
+  document.getElementById('roType').value='采购入库';
+  document.getElementById('roOperator').value='管理员';
+  document.getElementById('riSku')?document.getElementById('riSku').value=sku:null;
+  document.getElementById('riQty').value=qty;
+  openReceiptInModal();
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+function renderSettings(){
+  const s=getSettings();
+  document.getElementById('setSafety').value=s.safety_default||10;
+  document.getElementById('setCycle').value=s.purchase_cycle_default||7;
+  document.getElementById('setPredDays').value=s.prediction_days||30;
+  document.getElementById('setCategories').value=(s.categories||[]).join(',');
+  document.getElementById('setBrands').value=(s.brands||[]).join(',');
+}
+
+function saveSetting(key,val){
+  const s=getSettings();
+  s[key]=val;
+  saveSettings(s);
+}
+
+// ============================================================
+// AI COPILOT
+// ============================================================
+function toggleCopilot(){
+  document.getElementById('aiPanel').classList.toggle('open');
+}
+
+function askAI(){
+  const input=document.getElementById('aiInput');
+  const q=input.value.trim();if(!q)return;
+  const msgs=document.getElementById('aiMsgs');
+  msgs.innerHTML+=`<div class="msg user">${q}</div>`;
+  input.value='';
+
+  const p=getProducts(),s=getSettings(),pd=s.prediction_days||30,cd=s.purchase_cycle_default||7;
+  let answer='';
+
+  const ql=q.toLowerCase();
+  if(ql.includes('缺货')||ql.includes('没货')||ql.includes('快没')||ql.includes('断货')){
+    const low=p.filter(x=>{const d=getSales30(x.sku,pd)/pd;return d>0&&((x.stock||0)/d)<(x.cycle||cd);}).sort((a,b)=>(a.stock||0)-(b.stock||0));
+    if(low.length){
+      answer='以下产品即将缺货：<br>'+low.slice(0,5).map(x=>{
+        const d=getSales30(x.sku,pd)/pd;
+        const days=d>0?(x.stock||0)/d:999;
+        return `• <strong>${x.sku}</strong> ${x.name} — 库存 ${x.stock}，还可销售 ${days.toFixed(1)} 天，建议采购 ${Math.ceil(((x.cycle||cd)*d*1.5)-(x.stock||0))} 件。`;
+      }).join('<br>')+'<br><br>💡 可前往「采购建议中心」查看完整排序。';
+    }else answer='目前所有 SKU 库存充足，暂无缺货风险。';
+  }else if(ql.includes('采购')||ql.includes('买')||ql.includes('建议')){
+    const items=p.map(x=>{const d=getSales30(x.sku,pd)/pd;const days=d>0?(x.stock||0)/d:999;return{...x,daily:d,days,need:days<(x.cycle||cd),suggest:days<(x.cycle||cd)?Math.ceil(((x.cycle||cd)*d*1.5)-(x.stock||0)):0};}).filter(x=>x.need).sort((a,b)=>a.days-b.days);
+    if(items.length){
+      answer='建议今日采购清单：<br>'+items.slice(0,5).map(x=>`• <strong>${x.sku}</strong> ×${x.suggest} （库存 ${x.stock}，日均 ${x.daily.toFixed(1)}，可售 ${x.days.toFixed(1)}天）`).join('<br>');
+      answer+='<br><br>📊 采购优先级已按紧急程度排序。<br>🔍 如需查看详细原因，请前往「采购建议中心」。';
+    }else answer='暂无采购建议，所有 SKU 库存充足。';
+  }else if(ql.includes('健康')||ql.includes('评分')||ql.includes('风险')){
+    const alerts=p.filter(x=>(x.stock||0)<(x.safety||0)).length;
+    const health=p.length?Math.round((1-alerts/p.length)*100):100;
+    const worst=p.filter(x=>(x.stock||0)<(x.safety||0)).slice(0,3);
+    answer=`库存健康度：<strong>${health}%</strong>。<br>${alerts} 个 SKU 低于安全库存。${worst.length?'风险最高的：'+worst.map(x=>`${x.sku}（库存 ${x.stock}，安全线 ${x.safety}）`).join('、')+'。':''}<br>建议定期检查安全库存设置，确保预警准确。`;
+  }else if(ql.includes('库存')||ql.includes('多少')){
+    const total=p.reduce((a,b)=>a+(b.stock||0),0);
+    const val=p.reduce((a,b)=>a+(b.stock||0)*(b.avgPrice||0),0);
+    answer=`当前总库存：<strong>${total}</strong> 件，总金额：<strong>¥${val.toFixed(0)}</strong>。<br>共 <strong>${p.length}</strong> 个 SKU，其中 <strong>${p.filter(x=>(x.stock||0)>0).length}</strong> 个有库存。`;
+  }else if(ql.includes('快进')||ql.includes('入库')||ql.includes('出库')){
+    const t=getTx(),td=t.filter(x=>x.created.slice(0,10)===DB.today());
+    const tin=td.filter(x=>x.type==='in').length,tout=td.filter(x=>x.type==='out').length;
+    answer=`今日：入库 ${tin} 笔，出库 ${tout} 笔。<br>最近10笔：<br>`+t.slice(0,10).map(x=>`${x.created.slice(11,16)} ${x.type==='in'?'📥':'📤'} ${x.sku} ${x.type==='in'?'+':'-'}${x.qty}`).join('<br>');
+  }else{
+    answer='我可以帮你分析：<br>• 哪些产品快缺货？<br>• 今天建议采购什么？<br>• 库存健康度如何？<br>• 最近出入库情况？<br>• 库存金额有多少？<br><br>请直接问我上面这些问题。';
+  }
+  setTimeout(()=>{
+    msgs.innerHTML+=`<div class="msg ai">${answer}</div>`;
+    msgs.scrollTop=msgs.scrollHeight;
+  },300);
+}
+
+// ============================================================
+// EXPORT / IMPORT
+// ============================================================
+function exportProductsCSV(){
+  const p=getProducts();
+  const csv='\ufeffSKU,产品名称,分类,品牌,库存,安全库存,采购周期,最近单价\n'+p.map(x=>[x.sku,x.name,x.cat,x.brand,x.stock,x.safety,x.cycle,x.lastPrice].join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='products_export.csv';a.click();
+}
+
+function importProducts(files){
+  if(!files||!files.length)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const rows=e.target.result.split('\n').filter(r=>r.trim());
+    const h=rows[0].split(',').map(x=>x.trim().toLowerCase());
+    const si=h.indexOf('sku'),ni=h.indexOf('产品名称'),ci=h.indexOf('分类'),bi=h.indexOf('品牌');
+    if(si<0){alert('CSV需要SKU列');return}
+    const p=getProducts();
+    for(let i=1;i<rows.length;i++){
+      const c=rows[i].split(',').map(x=>x.trim());
+      if(!c[si])continue;
+      const exist=p.find(x=>x.sku===c[si]);
+      const obj={sku:c[si],name:c[ni]||c[si],cat:c[ci]||'',brand:c[bi]||'',stock:Number(c[h.indexOf('库存')])||0,safety:Number(c[h.indexOf('安全库存')])||10,cycle:Number(c[h.indexOf('采购周期')])||7,lastPrice:Number(c[h.indexOf('最近单价')])||0,avgPrice:0,unit:'',max:100,supplier:'',model:'',created:DB.today(),updated:DB.today()};
+      if(exist)Object.assign(exist,obj);else p.push({id:DB.genId(),...obj,model:''});
+    }
+    saveProducts(p);
+    renderProducts();
+    alert('导入完成');
+  };
+  reader.readAsText(files[0]);
+}
+
+function exportAllData(){
+  const data={products:getProducts(),transactions:getTx(),settings:getSettings(),exported:DB.now()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='aisi_backup_'+DB.today()+'.json';a.click();
+}
+
+function importAllData(files){
+  if(!files||!files.length)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const d=JSON.parse(e.target.result);
+      if(d.products)DB.set('products',d.products);
+      if(d.transactions)DB.set('transactions',d.transactions);
+      if(d.settings)DB.set('settings',d.settings);
+      alert('数据导入成功！页面即将刷新。');
+      location.reload();
+    }catch(e){alert('导入失败: '+e.message);}
+  };
+  reader.readAsText(files[0]);
+}
+
+function exportTransactions(){
+  renderTransactions(); // trigger display
+  const tx=getTx();
+  const csv='\ufeff时间,类型,SKU,数量,来源,备注\n'+tx.map(x=>[x.created,x.type,x.sku,x.qty,x.source||'',x.note||''].join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='transactions_'+DB.today()+'.csv';a.click();
+}
+
+// ============================================================
+// UTILITY
+// ============================================================
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function closeWxHint(){const h=document.getElementById('wxHint');if(h)h.style.display='none';const m=document.getElementById('main');if(m)m.style.paddingTop='';}
+// ===== Auth UI =====
+let authMode='login';
+function switchAuthTab(tab){authMode=tab;const login=tab==='login';document.getElementById('tabLogin').classList.toggle('active',login);document.getElementById('tabReg').classList.toggle('active',!login);document.getElementById('regFields').style.display=login?'none':'block';document.getElementById('authSubmit').textContent=login?'登录':'注册并登录';document.getElementById('authErr').textContent='';document.getElementById('forgotForm').style.display='none';document.getElementById('loginForm').style.display='block';}
+function updatePwMeter(){const p=document.getElementById('authPw').value;const s=Auth.pwStrength(p);const bar=document.getElementById('pwBar');const tip=document.getElementById('pwTip');const cols=['#e25c4b','#e25c4b','#e0a23c','#1f9e6e','#1f9e6e'];const labs=['太弱','太弱','一般','较强','很强'];bar.style.width=(s/4*100)+'%';bar.style.background=cols[s];tip.textContent='密码强度：'+labs[s]+(s<3?'（至少3类：大小写/数字/符号）':' ✓');}
+async function submitAuth(){const u=document.getElementById('authUser').value.trim();const p=document.getElementById('authPw').value;const err=document.getElementById('authErr');err.textContent='';if(!u||!p){err.textContent='请输入用户名和密码';return;}if(authMode==='register'){const p2=document.getElementById('authPw2').value;if(p!==p2){err.textContent='两次输入的密码不一致';return;}const secQ=document.getElementById('authSecQ').value;const secA=document.getElementById('authSecA').value;const r=await Auth.register(u,p,secQ,secA);if(!r.ok){err.textContent=r.msg;return;}const remember=document.getElementById('authRemember').checked;const l=await Auth.login(u,p,remember);if(!l.ok){err.textContent='注册成功，但自动登录失败，请手动登录';return;}}else{const remember=document.getElementById('authRemember').checked;const l=await Auth.login(u,p,remember);if(!l.ok){err.textContent=l.msg;return;}}enterApp();}
+let fgStage=0;
+function showForgot(){authMode='forgot';document.getElementById('loginForm').style.display='none';document.getElementById('forgotForm').style.display='block';const e=document.getElementById('fgErr');e.textContent='';e.style.color='#e25c4b';fgStage=0;document.getElementById('fgUser').value='';document.getElementById('fgUser').style.display='block';document.getElementById('fgQuestion').style.display='none';document.getElementById('fgAnswer').style.display='none';document.getElementById('fgNew').style.display='none';document.getElementById('fgNew2').style.display='none';document.getElementById('fgSubmit').textContent='下一步';}
+function showLogin(){authMode='login';document.getElementById('forgotForm').style.display='none';document.getElementById('loginForm').style.display='block';}
+async function forgotStep(){const err=document.getElementById('fgErr');err.textContent='';err.style.color='#e25c4b';if(fgStage===0){const u=document.getElementById('fgUser').value.trim();if(!u){err.textContent='请输入用户名';return;}const q=await Auth.recoverStart(u);if(!q){err.textContent='账号不存在或信息有误';return;}document.getElementById('fgQuestion').textContent='安全问题：'+q;document.getElementById('fgQuestion').style.display='block';document.getElementById('fgAnswer').style.display='block';document.getElementById('fgNew').style.display='block';document.getElementById('fgNew2').style.display='block';fgStage=1;document.getElementById('fgSubmit').textContent='验证并重置密码';}else{const u=document.getElementById('fgUser').value.trim();const ans=document.getElementById('fgAnswer').value;const np=document.getElementById('fgNew').value;const np2=document.getElementById('fgNew2').value;if(np!==np2){err.textContent='两次新密码不一致';return;}const r=await Auth.recoverFinish(u,ans,np);if(!r.ok){err.textContent=r.msg;return;}err.style.color='#1f9e6e';err.textContent='✓ 密码已重置，请用新密码登录';setTimeout(()=>{showLogin();document.getElementById('authUser').value=u;},1500);}}
+function enterApp(){const sc=document.getElementById('authScreen');if(sc)sc.classList.add('hidden');initData();wrapTables();refreshDashboard();syncTabbar();goPage('dashboard');if(/MicroMessenger/i.test(navigator.userAgent)){const h=document.getElementById('wxHint');if(h){h.style.display='block';const m=document.getElementById('main');if(m)m.style.paddingTop='44px';}}}
+function boot(){if(Auth.isAuthed()){enterApp();}else{const sc=document.getElementById('authScreen');if(sc)sc.classList.remove('hidden');}}
+function changePw(){const e=document.getElementById('pwErr');e.style.color='#e25c4b';e.textContent='';Auth.changePw(document.getElementById('oldPw').value,document.getElementById('newPw').value).then(r=>{if(r.ok){e.style.color='#1f9e6e';e.textContent='✓ 密码已更新';document.getElementById('oldPw').value='';document.getElementById('newPw').value='';}else{e.style.color='#e25c4b';e.textContent=r.msg;}});}
+function doLogout(){if(!confirm('确定退出登录？'))return;Auth.logout();location.reload();}
+function renderSettingsAccount(){const s=Auth.session();const u=document.getElementById('setUser');if(u)u.textContent=s?s.username:'未登录';}
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el=>{el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open')})});
+
+// ============================================================
+// INIT
+// ============================================================
+boot();
+</script>
+<!-- Mobile bottom tabbar (WeChat / mobile only) -->
+<nav class="mobile-tabbar" id="mobileTabbar">
+  <div class="tab active" data-page="dashboard" onclick="goPage('dashboard')"><div class="ic">📊</div>驾驶舱</div>
+  <div class="tab" data-page="products" onclick="goPage('products')"><div class="ic">📦</div>产品</div>
+  <div class="tab" data-page="inventory" onclick="goPage('inventory')"><div class="ic">📋</div>库存</div>
+  <div class="tab" data-page="ai-forecast" onclick="goPage('ai-forecast')"><div class="ic">🤖</div>预测</div>
+  <div class="tab" data-page="purchase" onclick="goPage('purchase')"><div class="ic">🛒</div>采购</div>
+</nav>
 </body>
 </html>
