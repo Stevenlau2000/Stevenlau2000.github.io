@@ -1,56 +1,35 @@
-/* knowledge.js — 浏览器内轻量 RAG 检索（关键词 + bigram 相关性打分） */
-(function (global) {
-  'use strict';
+// === Impro 空压机 AI 维修副驾 - 知识库检索（浏览器内 RAG） ===
+(function () {
+  let KB = null;            // { version, count, chunks: [...] }
+  let userChunks = [];     // 用户上传的分块
 
-  let KB = null; // { version, count, chunks: [...] }
-  let userChunks = []; // 用户上传文件解析出的分块（运行时 + 持久化合并）
-
-  function bigrams(s) {
-    const clean = (s || '').replace(/[\s\p{P}\p{S}]+/gu, '');
-    const out = [];
-    for (let i = 0; i < clean.length - 1; i++) {
-      const b = clean.slice(i, i + 2);
-      if (/[\u4e00-\u9fa5]{2}/.test(b)) out.push(b);
-    }
-    return out;
+  function bigrams(text) {
+    const s = text.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
+    const b = new Set();
+    for (let i = 0; i < s.length - 1; i++) b.add(s.slice(i, i + 2));
+    return b;
   }
 
-  async function init() {
-    if (KB) return KB;
-    const res = await fetch('data/knowledge.json', { cache: 'no-cache' });
-    KB = await res.json();
-    return KB;
-  }
-
-  // 相关性打分：标题命中权重高，关键词次之，正文包含再次之
   function scoreChunk(chunk, qbg) {
-    if (!qbg.length) return 0;
-    let score = 0;
-    const title = chunk.title || '';
-    const text = chunk.text || '';
-    const kws = chunk.keywords || [];
-    for (const qb of qbg) {
-      if (title.includes(qb)) score += 4;
-      if (kws.some((k) => k === qb || k.includes(qb) || qb.includes(k))) score += 2;
-      if (text.includes(qb)) score += 1;
-    }
-    return score;
+    const cbg = bigrams(chunk.title + ' ' + chunk.text + ' ' + (chunk.keywords || []).join(' '));
+    if (!qbg.size || !cbg.size) return 0;
+    let inter = 0;
+    qbg.forEach((bg) => { if (cbg.has(bg)) inter++; });
+    return inter / Math.max(qbg.size, cbg.size);
   }
 
   function search(query, topK = 8) {
-    if (!KB) return userChunks.slice(0, topK);
-    const all = KB.chunks.concat(userChunks);
+    if (!KB && !userChunks.length) return [];
     const qbg = bigrams(query);
-    const scored = all
+    const all = [...(KB ? KB.chunks : []), ...userChunks];
+    return all
       .map((c) => ({ chunk: c, score: scoreChunk(c, qbg) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, topK)
       .map((x) => x.chunk);
-    return scored;
   }
 
-  // 仅检索用户上传知识（离线引擎追加上下文用）
   function searchUser(query, topK = 4) {
     if (!userChunks.length) return [];
     const qbg = bigrams(query);
@@ -62,18 +41,32 @@
       .map((x) => x.chunk);
   }
 
-  function setUserChunks(arr) { userChunks = Array.isArray(arr) ? arr : []; }
-  function getUserChunks() { return userChunks; }
-
-  // 拼成可注入 System Prompt 的知识上下文
   function formatContext(chunks) {
-    if (!chunks.length) return '（本次未检索到相关参考知识，基于通用工程推理，并标注「工程推理，未经知识库确认」）';
-    const blocks = chunks.map((c, i) => {
-      const src = c.source || 'reference';
-      return `[参考 ${i + 1}｜${c.category}｜${src}]\n${c.text}`;
-    });
-    return blocks.join('\n\n');
+    if (!chunks || !chunks.length) return '';
+    return chunks.map((c, i) => {
+      const tag = c.source?.startsWith('upload') ? 'upload' : 'ref';
+      return `[${tag}|${c.source || '内置库'}][${c.title}] ${c.text}`;
+    }).join('\n\n');
   }
 
-  global.KnowledgeRAG = { init, search, formatContext, searchUser, setUserChunks, getUserChunks };
-})(window);
+  function setUserChunks(chunks) {
+    userChunks = chunks || [];
+  }
+
+  function getUserChunks() {
+    return userChunks;
+  }
+
+  async function init() {
+    try {
+      const resp = await fetch('data/knowledge.json');
+      KB = await resp.json();
+      console.log(`[KB] 加载 ${KB.chunks.length} 条知识`);
+    } catch (e) {
+      console.warn('[KB] 知识库加载失败:', e.message);
+      KB = null;
+    }
+  }
+
+  globalThis.KnowledgeRAG = { init, search, searchUser, formatContext, setUserChunks, getUserChunks };
+})();
