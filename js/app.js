@@ -1,494 +1,544 @@
-/* app.js — 主逻辑：对话流式、混元调用、设置、案例库、安全护栏 */
+// === Impro 空压机 AI 维修副驾 - 主对话逻辑 ===
 (function () {
-  'use strict';
-
-  const C = window.AppConfig;
-  const K = window.KnowledgeRAG;
-  const DB = window.CasesDB;
+  const $ = (id) => document.getElementById(id);
 
   // ---------- 状态 ----------
   const state = {
-    messages: [],          // 对话历史（不含 system）
-    settings: { url: '', model: '', key: '' },
-    knowledgeReady: false,
+    messages: [],
+    mode: 'online',    // 'online' | 'offline'
+    apiKey: '',
+    endpoint: CONFIG.DEFAULT_ENDPOINT,
+    model: CONFIG.DEFAULT_MODEL,
+    sending: false,
   };
 
-  // ---------- DOM ----------
-  const $ = (id) => document.getElementById(id);
-  const chat = $('chat');
-  const input = $('user-input');
-  const connState = $('conn-state');
+  // ---------- DOM 引用 ----------
+  let chat, input, sendBtn, connDot, modeSelect, keyInput, endpointInput;
 
-  // ---------- 工具 ----------
-  function escapeHtml(s) {
-    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // ---------- 工具函数 ----------
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
   }
-  function inline(s) {
-    s = escapeHtml(s);
-    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    return s;
-  }
-  function buildTable(rows) {
-    const cells = (r) => r.split('|').map((x) => x.trim()).filter((x) => x);
-    const head = cells(rows[0]);
-    const body = rows.slice(2).map(cells);
-    let h = '<table><thead><tr>' + head.map((c) => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>';
-    for (const r of body) h += '<tr>' + r.map((c) => `<td>${inline(c)}</td>`).join('') + '</tr>';
-    return h + '</tbody></table>';
-  }
-  function renderBlocks(text) {
-    const lines = text.split('\n');
-    const out = [];
-    let listBuf = [], tableBuf = [];
-    const flushList = () => { if (listBuf.length) { out.push('<ul>' + listBuf.map((x) => '<li>' + inline(x) + '</li>').join('') + '</ul>'); listBuf = []; } };
-    const flushTable = () => { if (tableBuf.length >= 3) { out.push(buildTable(tableBuf)); } tableBuf = []; };
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t) { flushList(); flushTable(); continue; }
-      let m;
-      if ((m = t.match(/^(#{1,3})\s+(.*)/))) { flushList(); flushTable(); const l = m[1].length; out.push(`<h${l}>${inline(m[2])}</h${l}>`); }
-      else if (/^\|.*\|\s*$/.test(t) && t.split('|').filter((x) => x.trim()).length >= 2) { flushList(); tableBuf.push(t); }
-      else if ((m = t.match(/^([-*])\s+(.*)/))) { flushTable(); listBuf.push(m[2]); }
-      else if ((m = t.match(/^(\d+)\.\s+(.*)/))) { flushTable(); listBuf.push(m[2]); }
-      else if ((m = t.match(/^>\s?(.*)/))) { flushList(); flushTable(); out.push('<blockquote>' + inline(m[1]) + '</blockquote>'); }
-      else { flushList(); flushTable(); out.push('<p>' + inline(t) + '</p>'); }
-    }
-    flushList(); flushTable();
-    return out.join('');
-  }
-  function renderMarkdown(src) {
-    const parts = src.split(/```/);
-    let html = '';
-    for (let i = 0; i < parts.length; i++) {
-      if (i % 2 === 0) html += renderBlocks(parts[i]);
-      else { const code = parts[i].replace(/^\n/, '').replace(/\n$/, ''); html += '<pre><code>' + escapeHtml(code) + '</code></pre>'; }
-    }
+
+  function renderMarkdown(text) {
+    if (!text) return '';
+    let html = escapeHtml(text);
+    // 代码块
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>');
+    // 行内代码
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // 标题
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    // 加粗
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // 列表
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$1. $2</li>');
+    // 引用
+    html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+    // 换行
+    html = html.replace(/\n/g, '<br>');
+    html = html.replace(/(<\/h[234]>)\s*<br>/g, '$1');
+    html = html.replace(/(<\/li>)\s*<br>/g, '$1');
+    html = html.replace(/(<\/ul>)\s*<br>/g, '$1');
+    html = html.replace(/(<\/blockquote>)\s*<br>/g, '$1');
+    html = html.replace(/(<\/pre>)\s*<br>/g, '$1');
     return html;
   }
-  function toast(msg, kind) {
-    let t = document.querySelector('.toast');
-    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
-    t.textContent = msg; t.style.background = kind === 'err' ? '#c0392b' : '#1e9e5a';
-    t.classList.add('show');
-    clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2200);
+
+  function toast(msg, duration = 2500) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.classList.add('show'), 10);
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, duration);
   }
 
-  // ---------- 渲染消息 ----------
-  const SVG_BOT = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="16" cy="16" r="12"/><path d="M16 16 L16 6"/><circle cx="16" cy="16" r="2.2" fill="currentColor" stroke="none"/><path d="M6.5 16 H9 M23 16 H25.5 M16 6.5 V9" stroke-width="1.5" opacity=".55"/></svg>';
-  const SVG_USER = '<svg viewBox="0 0 32 32" fill="currentColor"><circle cx="16" cy="11" r="5.2"/><path d="M5 28 a11 11 0 0 1 22 0 Z"/></svg>';
+  function updateConnState(status) {
+    if (!connDot) return;
+    connDot.className = 'conn-dot ' + status;
+  }
 
+  // ---------- 渲染 ----------
   function addUserMsg(text) {
-    const el = document.createElement('div');
-    el.className = 'msg user';
-    el.innerHTML = `<div class="avatar">${SVG_USER}</div><div class="bubble"></div>`;
-    el.querySelector('.bubble').textContent = text;
-    chat.appendChild(el);
-    scrollDown();
+    const div = document.createElement('div');
+    div.className = 'msg user';
+    div.innerHTML = `<div class="msg-avatar"><svg viewBox="0 0 40 40" width="32" height="32"><circle cx="20" cy="20" r="18" fill="#1a3a5c"/><text x="20" y="25" text-anchor="middle" fill="#00d4ff" font-size="18" font-family="sans-serif">👤</text></svg></div><div class="msg-bubble"><div class="msg-text">${escapeHtml(text)}</div></div>`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
   }
-  function addBotMsg(kbCount) {
-    const el = document.createElement('div');
-    el.className = 'msg bot';
-    el.innerHTML =
-      `<div class="avatar">${SVG_BOT}</div>` +
-      `<div class="bubble">` +
-        `<div class="kb-hint">🔎 已匹配 ${kbCount} 条知识库参考（P1–P5 已融入推理）</div>` +
-        `<div class="content"></div>` +
-        `<div class="msg-acts"><button class="ghost sm" data-save-case>📑 沉淀案例</button></div>` +
-      `</div>`;
-    chat.appendChild(el);
-    const content = el.querySelector('.content');
-    const saveBtn = el.querySelector('[data-save-case]');
-    saveBtn.addEventListener('click', () => saveCaseFromConversation(content.textContent, saveBtn));
-    scrollDown();
-    return content;
-  }
-  function scrollDown() { requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; }); }
 
-  // ---------- LLM 调用（流式 SSE） ----------
-  async function callLLM(systemText, onDelta) {
-    const { url, model, key } = state.settings;
-    if (!url || !key) { toast('请先配置 API（⚙️）', 'err'); throw new Error('no-config'); }
-    const body = {
-      model,
-      messages: [{ role: 'system', content: systemText }, ...state.messages],
-      temperature: C.temperature,
-      max_tokens: C.maxTokens,
-      stream: true,
-    };
-    const res = await fetch(url.replace(/\/$/, '') + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify(body),
+  function addBotMsg(kbCount) {
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+    const kbInfo = kbCount ? `<div class="kb-badge">📚 ${kbCount} 条知识</div>` : '';
+    div.innerHTML = `<div class="msg-avatar"><svg viewBox="0 0 40 40" width="32" height="32"><circle cx="20" cy="20" r="18" fill="#2d1b00"/><circle cx="20" cy="16" r="7" fill="#f0b429"/><circle cx="20" cy="16" r="3" fill="#1a1a2e"/><rect x="14" y="28" width="12" height="3" rx="1.5" fill="#f0b429"/></svg></div><div class="msg-bubble"><div class="msg-text"></div>${kbInfo}</div>`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div.querySelector('.msg-text');
+  }
+
+  const DEMO_CHIPS = [
+    '排气温度105℃，怎么办？',
+    '压力偏低排查步骤',
+    '螺杆机异响故障',
+    '变频器报警F011',
+    '油分更换周期',
+    '冷却器清洗方法',
+  ];
+
+  function welcome() {
+    chat.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'welcome';
+    div.innerHTML = `
+      <div class="welcome-logo">
+        <svg viewBox="0 0 100 100" width="80" height="80">
+          <circle cx="50" cy="50" r="44" fill="none" stroke="#f0b429" stroke-width="3"/>
+          <circle cx="50" cy="50" r="30" fill="none" stroke="#0ea5e9" stroke-width="3" stroke-dasharray="141.3" stroke-dashoffset="47.1"/>
+          <text x="50" y="42" text-anchor="middle" fill="#f0b429" font-size="24" font-family="monospace">MPa</text>
+          <text x="50" y="64" text-anchor="middle" fill="#00d4ff" font-size="10" font-family="monospace">IMPRO</text>
+          <line x1="20" y1="50" x2="8" y2="50" stroke="#f0b429" stroke-width="2"/>
+          <line x1="80" y1="50" x2="92" y2="50" stroke="#f0b429" stroke-width="2"/>
+          <line x1="50" y1="20" x2="50" y2="8" stroke="#f0b429" stroke-width="2"/>
+          <line x1="50" y1="80" x2="50" y2="92" stroke="#f0b429" stroke-width="2"/>
+        </svg>
+      </div>
+      <h2>老宋 · 空压机智能诊断</h2>
+      <p class="welcome-sub">30 年维修总工，随时为您服务</p>
+      <div class="welcome-chips">${DEMO_CHIPS.map((c) => `<span class="chip" data-text="${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('')}</div>
+      <p class="welcome-hint">${state.mode === 'online' ? '💬 输入故障现象，老宋在线诊断' : '🔌 离线模式 — 基础规则引擎'}</p>
+    `;
+    chat.appendChild(div);
+    // 绑定 chips
+    div.querySelectorAll('.chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const text = chip.getAttribute('data-text');
+        input.value = text;
+        send();
+      });
     });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error('HTTP ' + res.status + ' ' + errText.slice(0, 200));
+  }
+
+  // ---------- AI 调用 ----------
+  async function callLLM(userMsg, context) {
+    const baseUrl = state.endpoint.replace(/\/+$/, '');
+    const url = baseUrl + '/chat/completions';
+    const ctxBlock = context ? { role: 'system', content: '参考以下知识库内容回答：\n\n' + context } : null;
+    const messages = [
+      { role: 'system', content: CONFIG.SYSTEM_PROMPT + '\n\n你叫「老宋」，请以老宋的口吻直接回答。回答要简短、专业、接地气。' },
+      ...(ctxBlock ? [ctxBlock] : []),
+      ...state.messages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
+    ];
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.apiKey },
+      body: JSON.stringify({
+        model: state.model,
+        messages,
+        temperature: 0.6,
+        max_tokens: 1200,
+        stream: false,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.text().catch(() => '');
+      throw new Error(`API ${resp.status}: ${err.slice(0, 200)}`);
     }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '', full = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf('\n\n')) >= 0) {
-        const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
-        for (const ln of chunk.split('\n')) {
-          const line = ln.trim();
-          if (!line.startsWith('data:')) continue;
-          const data = line.slice(5).trim();
-          if (data === '[DONE]') continue;
-          try {
-            const j = JSON.parse(data);
-            const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
-            if (d) { full += d; onDelta(full); }
-          } catch (e) { /* ignore */ }
-        }
-      }
-    }
-    return full;
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || '(模型未返回内容)';
   }
 
   // ---------- 发送 ----------
-  async function send(text) {
-    text = (text || '').trim();
-    if (!text) return;
-    const offline = (localStorage.getItem(C.storageKeys.mode) || 'online') === 'offline';
-    if (!offline && (!state.settings.url || !state.settings.key)) {
-      toast('请先点 ⚙️ 配置 API Key', 'err');
-      $('settings-modal').classList.remove('hidden');
-      return;
-    }
+  async function send() {
+    const text = input.value.trim();
+    if (!text || state.sending) return;
+    input.value = '';
+    state.sending = true;
+    sendBtn.disabled = true;
+
+    // 添加用户消息
     addUserMsg(text);
-    input.value = ''; input.style.height = 'auto';
+    state.messages.push({ role: 'user', content: text });
 
-    // 前端安全护栏提示（在线/离线共用）
-    const riskWords = ['短接', '绕过', '关闭保护', '解除急停', '短接急停', '屏蔽报警'];
-    if (riskWords.some((w) => text.includes(w))) {
-      const warn = document.createElement('div');
-      warn.className = 'safety';
-      warn.textContent = '⚠️ 检测到可能涉及绕过安全保护的描述。根据 AI 宪法，任何关闭/短接安全保护的要求都将被拒绝。请确认操作符合 LOTO 规范。';
-      chat.appendChild(warn); scrollDown();
-    }
+    // 判断离线
+    const offline = state.mode === 'offline' || !state.apiKey;
 
-    // 离线规则引擎分支（零 API）
-    if (offline) {
+    // 在线分支
+    if (!offline) {
       try {
-        if (!OfflineEngine.kb) await OfflineEngine.init();
-        const { text: out, kbCount } = OfflineEngine.diagnose(text);
-        const contentEl = addBotMsg(kbCount);
-        let full = out;
-        // 追加上传资料中相关片段（离线也能用你上传的手册/SOP）
-        const up = K.searchUser(text, 4);
-        if (up.length) {
-          full += '\n\n## 📚 你上传的资料（相关片段）\n' +
-            up.map((c, i) => `[资料 ${i + 1}｜${c.source}]\n${c.text}`).join('\n\n');
+        updateConnState('thinking');
+        // RAG 检索
+        let context = '';
+        let kbCount = 0;
+        if (globalThis.KnowledgeRAG) {
+          const hits = KnowledgeRAG.search(text, 8);
+          kbCount = hits.length;
+          context = KnowledgeRAG.formatContext(hits);
         }
-        contentEl.innerHTML = renderMarkdown(full);
+        const contentEl = addBotMsg(kbCount);
+        // 检索上传库
+        let uploadCtx = '';
+        if (globalThis.KnowledgeRAG) {
+          const uploadHits = KnowledgeRAG.searchUser(text, 4);
+          if (uploadHits.length) {
+            uploadCtx = KnowledgeRAG.formatContext(uploadHits);
+            context = context + '\n\n【用户上传资料】\n' + uploadCtx;
+          }
+        }
+        const reply = await callLLM(text, context);
+        contentEl.innerHTML = renderMarkdown(reply);
+        state.messages.push({ role: 'assistant', content: reply });
+        updateConnState('online');
+      } catch (e) {
+        updateConnState('error');
+        const contentEl = addBotMsg(0);
+        contentEl.innerHTML = '<p style="color:#ef4444">⚠️ 在线诊断失败：' + escapeHtml(e.message) + '</p><p>请检查 API Key 和网络连接，或切换到「离线模式」使用规则引擎。</p>';
+      }
+    } else {
+      // 离线分支
+      try {
+        let kbCount = 0;
+        // 检索上传库
+        let uploadCtx = '';
+        if (globalThis.KnowledgeRAG) {
+          const hits = KnowledgeRAG.search(text, 8);
+          kbCount += hits.length;
+          const uh = KnowledgeRAG.searchUser(text, 4);
+          kbCount += uh.length;
+        }
+        const result = OfflineEngine.diagnose(text);
+        const contentEl = addBotMsg(kbCount);
+        contentEl.innerHTML = renderMarkdown(result.text);
+        state.messages.push({ role: 'assistant', content: result.text });
       } catch (e) {
         const contentEl = addBotMsg(0);
-        contentEl.innerHTML = '<p style="color:#dc2626">⚠️ 离线引擎加载失败：' + escapeHtml(e.message) + '</p>';
+        contentEl.innerHTML = '<p style="color:#ef4444">⚠️ 离线引擎错误：' + escapeHtml(e.message) + '</p>';
       }
-      return;
     }
 
-    state.messages.push({ role: 'user', content: text });
-    const chunks = K.search(text, 8);
-    const sysText = C.SYSTEM_PROMPT.replace('{KNOWLEDGE_CONTEXT}', K.formatContext(chunks));
-    const contentEl = addBotMsg(chunks.length);
-    contentEl.classList.add('typing');
-    try {
-      const full = await callLLM(sysText, (full) => { contentEl.classList.remove('typing'); contentEl.innerHTML = renderMarkdown(full); scrollDown(); });
-      contentEl.innerHTML = renderMarkdown(full);
-    } catch (e) {
-      if (e.message !== 'no-config') {
-        contentEl.classList.remove('typing');
-        contentEl.innerHTML = '<p style="color:#dc2626">⚠️ 调用失败：' + escapeHtml(e.message) + '</p><p class="muted">请检查 ⚙️ 中的端点 / 模型 / API Key 是否正确，以及网络是否可访问该端点。</p>';
-      }
-      // 回滚本次 user message（避免污染历史）
-      state.messages.pop();
-    }
-  }
-
-  // ---------- 案例沉淀 ----------
-  function pick(arr, re, fallback) {
-    for (const m of arr) { const x = m.content.match(re); if (x) return x[1].trim(); }
-    return fallback || '';
-  }
-  async function saveCaseFromConversation(botText, btn) {
-    const recent = state.messages.slice(-6);
-    const machine = pick(recent, /(?:型号|machine|model)[:：]\s*([^\s,，。\n]{2,30})/i, '');
-    const fault = pick(recent.filter((m) => m.role === 'user'), /(.{4,60})/, '');
-    const rec = await DB.add({
-      machine, sn: '', hours: '', fault: fault || '(见对话)', alarm: '',
-      rootCause: '', repair: '', parts: '', downtime: '', verification: '',
-      tags: '', engineer: '', photos: '', note: (botText || '').slice(0, 3000),
-    });
-    toast('📑 已存入案例库（草稿），可在 📚 完善并提交审核');
+    // 保存状态
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.MESSAGES, JSON.stringify(state.messages)); } catch (e) {}
+    state.sending = false;
+    sendBtn.disabled = false;
+    chat.scrollTop = chat.scrollHeight;
   }
 
   // ---------- 设置面板 ----------
-  function loadSettings() {
-    state.settings = {
-      url: localStorage.getItem(C.storageKeys.endpointUrl) || C.ENDPOINTS[0].url,
-      model: localStorage.getItem(C.storageKeys.model) || C.ENDPOINTS[0].model,
-      key: localStorage.getItem(C.storageKeys.apiKey) || '',
-    };
-    const sel = $('set-endpoint');
-    sel.innerHTML = C.ENDPOINTS.map((e, i) => `<option value="${i}">${e.label}</option>`).join('');
-    // 选中匹配项
-    let idx = C.ENDPOINTS.findIndex((e) => e.url === state.settings.url);
-    if (idx < 0) idx = C.ENDPOINTS.length - 1; // 自定义
-    sel.value = String(idx);
-    $('set-url').value = idx === C.ENDPOINTS.length - 1 ? state.settings.url : '';
-    $('set-model').value = state.settings.model;
-    $('set-key').value = state.settings.key;
-    $('set-mode').value = localStorage.getItem(C.storageKeys.mode) || 'online';
-    updateConnState();
-  }
-  function updateConnState() {
-    const dot = $('conn-dot');
-    if ((localStorage.getItem(C.storageKeys.mode) || 'online') === 'offline') {
-      connState.textContent = '离线模式 · 规则引擎';
-      connState.style.color = '#ffd591';
-      if (dot) { dot.classList.add('ok'); dot.style.background = '#ffb020'; }
-      return;
-    }
-    const ok = state.settings.url && state.settings.key;
-    connState.textContent = ok ? '已连接 · ' + state.settings.model : '未配置 API';
-    connState.style.color = ok ? '#3ddc84' : '#ff6b6b';
-    if (dot) { dot.classList.toggle('ok', !!ok); dot.style.background = ok ? '#3ddc84' : '#ff5252'; }
-  }
-  function saveSettings() {
-    const mode = $('set-mode').value;
-    localStorage.setItem(C.storageKeys.mode, mode);
-    if (mode === 'offline') {
-      state.settings.mode = 'offline';
-      updateConnState();
-      setMsg('✅ 已保存（离线模式 · 零 Key）', 'ok');
-      return;
-    }
-    const idx = parseInt($('set-endpoint').value, 10);
-    const e = C.ENDPOINTS[idx];
-    const url = idx === C.ENDPOINTS.length - 1 ? $('set-url').value.trim() : e.url;
-    const model = idx === C.ENDPOINTS.length - 1 ? $('set-model').value.trim() : e.model;
-    const key = $('set-key').value.trim();
-    if (!url || !model || !key) { setMsg('端点、模型、Key 均需填写', 'err'); return; }
-    state.settings = { url, model, key, mode: 'online' };
-    localStorage.setItem(C.storageKeys.endpointUrl, url);
-    localStorage.setItem(C.storageKeys.model, model);
-    localStorage.setItem(C.storageKeys.apiKey, key);
-    updateConnState();
-    setMsg('✅ 已保存', 'ok');
-  }
-  function setMsg(t, k) { const m = $('set-msg'); m.textContent = t; m.className = 'msg ' + (k || ''); }
-  async function testConn() {
-    const idx = parseInt($('set-endpoint').value, 10);
-    const e = C.ENDPOINTS[idx];
-    const url = idx === C.ENDPOINTS.length - 1 ? $('set-url').value.trim() : e.url;
-    const model = idx === C.ENDPOINTS.length - 1 ? $('set-model').value.trim() : e.model;
-    const key = $('set-key').value.trim();
-    if (!url || !model || !key) { setMsg('请先填写完整再测试', 'err'); return; }
-    setMsg('测试中…', '');
-    try {
-      const res = await fetch(url.replace(/\/$/, '') + '/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content: '你好' }], max_tokens: 10 }),
-      });
-      setMsg(res.ok ? '✅ 连接成功 (HTTP ' + res.status + ')' : '❌ 失败 HTTP ' + res.status, res.ok ? 'ok' : 'err');
-    } catch (err) { setMsg('❌ 网络错误：' + err.message, 'err'); }
+  let settingsModal, casesModal, kbModal;
+
+  function openSettings() {
+    settingsModal.classList.remove('hidden');
+    settingsModal.querySelector('[data-close="settings-modal"]')?.focus();
   }
 
-  // ---------- 案例库面板 ----------
+  function closeSettings() {
+    settingsModal.classList.add('hidden');
+    // 保存
+    state.mode = modeSelect.value;
+    state.apiKey = keyInput.value.trim();
+    state.endpoint = endpointInput.value.trim() || CONFIG.DEFAULT_ENDPOINT;
+    localStorage.setItem(CONFIG.STORAGE_KEYS.MODE, state.mode);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.API_KEY, state.apiKey);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.ENDPOINT, state.endpoint);
+    updateConnState(state.mode === 'online' && state.apiKey ? 'online' : 'offline');
+    toast(state.mode === 'online' && state.apiKey ? '在线模式已保存' : '已切换为离线模式');
+  }
+
+  // ---------- 案例面板 ----------
   async function openCases() {
-    $('cases-modal').classList.remove('hidden');
-    await renderCases();
-  }
-  async function renderCases() {
-    const list = await DB.list();
-    $('cases-count').textContent = list.length + ' 条';
-    const ul = $('cases-list');
-    const detail = $('case-detail');
-    detail.classList.add('hidden'); detail.innerHTML = '';
-    if (!list.length) { ul.innerHTML = '<div class="empty">暂无案例。对话中点击「📑 沉淀案例」即可积累。</div>'; return; }
-    ul.innerHTML = list.map((c) => `
-      <li class="case-item" data-id="${c.id}">
-        <div class="ci-top"><span class="ci-title">${escapeHtml(c.machine || '未知机型')} · ${escapeHtml((c.fault || '').slice(0, 24))}</span>
-        <span class="badge ${c.status}">${statusLabel(c.status)}</span></div>
-        <div class="ci-sub">${escapeHtml((c.rootCause || '根因待填').slice(0, 40))} · ${fmtDate(c.createdAt)}</div>
-      </li>`).join('');
-    ul.querySelectorAll('.case-item').forEach((li) => li.addEventListener('click', () => showCase(li.dataset.id)));
-  }
-  function statusLabel(s) { return { draft: '草稿', review: '审核中', published: '已发布', rejected: '已退回' }[s] || s; }
-  function fmtDate(s) { try { return new Date(s).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
-  async function showCase(id) {
-    const c = await DB.get(id);
-    if (!c) return;
-    const d = $('case-detail');
-    d.classList.remove('hidden');
-    const field = (k, label, editable) =>
-      `<div class="kv"><b>${label}：</b>${editable ? `<input data-f="${k}" value="${escapeHtml(c[k] || '')}" style="width:70%;padding:4px;border:1px solid #e2e8f0;border-radius:6px;"/>` : escapeHtml(c[k] || '—')}</div>`;
-    d.innerHTML = `
-      <h3 style="margin:0 0 8px;">案例 ${id.slice(-6)} · <span class="badge ${c.status}">${statusLabel(c.status)}</span></h3>
-      ${field('machine', '机型')} ${field('sn', 'SN')} ${field('hours', '运行小时')}
-      ${field('fault', '故障现象')} ${field('alarm', '报警代码')}
-      ${field('rootCause', '根因', true)} ${field('repair', '维修动作', true)}
-      ${field('parts', '更换备件', true)} ${field('downtime', '停机时长')}
-      ${field('verification', '验证结果', true)} ${field('tags', '标签')} ${field('engineer', '工程师')}
-      <div class="kv"><b>备注/对话摘要：</b><div style="font-size:12.5px;color:#475569;white-space:pre-wrap;">${escapeHtml((c.note || '').slice(0, 800))}</div></div>
-      <div class="acts">
-        <button class="primary sm" data-act="save">💾 保存编辑</button>
-        <button class="ghost sm" data-act="review">提交审核</button>
-        <button class="ghost sm" data-act="publish">直接发布</button>
-        <button class="danger-ghost sm" data-act="delete">删除</button>
-      </div>`;
-    d.querySelector('[data-act="save"]').onclick = async () => {
-      const patch = {};
-      d.querySelectorAll('input[data-f]').forEach((i) => (patch[i.dataset.f] = i.value));
-      await DB.update(id, patch); toast('💾 已保存');
-    };
-    d.querySelector('[data-act="review"]').onclick = async () => { await DB.update(id, { status: 'review' }); toast('已提交审核'); renderCases(); };
-    d.querySelector('[data-act="publish"]').onclick = async () => { await DB.update(id, { status: 'published' }); toast('✅ 已发布'); renderCases(); };
-    d.querySelector('[data-act="delete"]').onclick = async () => { if (confirm('确认删除该案例？')) { await DB.remove(id); toast('已删除'); renderCases(); } };
-  }
-  async function exportCases() {
-    const list = await DB.list();
-    const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'impro-cases-' + new Date().toISOString().slice(0, 10) + '.json';
-    a.click();
+    casesModal.classList.remove('hidden');
+    await renderCaseList();
   }
 
-  // ---------- 知识库文件上传面板 ----------
-  function fmtDur(s) { s = Math.round(s || 0); const m = Math.floor(s / 60); const r = s % 60; return m + ':' + String(r).padStart(2, '0'); }
-  function kbStatus(s) {
-    return { indexed: '已索引', pending: '待处理', parsing: '解析中', transcribing: '转写中', error: '失败', empty: '空文档', 'error': '失败' }[s] || s;
-  }
-  function kbItemHtml(f) {
-    const ic = f.category === 'document' ? { c: 'doc', e: '📄' }
-      : f.category === 'audio' ? { c: 'audio', e: '🎙️' }
-      : f.category === 'video' ? { c: 'video', e: '🎞️' } : { c: '', e: '📦' };
-    const sub = [Uploads.fmtSize(f.size),
-      f.status === 'indexed' ? ((f.chunks || []).length + ' 段') : '',
-      f.duration ? fmtDur(f.duration) : ''].filter(Boolean).join(' · ');
-    let acts = '<button class="danger-ghost sm" data-act="del">删除</button>';
-    if (f.category === 'audio' || f.category === 'video') {
-      acts = '<button class="ghost sm" data-act="save">💾 保存文本</button>' + acts;
-      if (f.category === 'audio' && f.status !== 'transcribing') acts = '<button class="primary sm" data-act="transcribe">🎧 AI 转写</button>' + acts;
+  async function renderCaseList() {
+    if (!globalThis.CaseDB) return;
+    const list = await CaseDB.getAll().catch(() => []);
+    document.getElementById('cases-count').textContent = list.length + ' 条';
+
+    const ul = document.getElementById('cases-list');
+    const detail = document.getElementById('case-detail');
+    detail.classList.add('hidden');
+    ul.innerHTML = '';
+
+    if (!list.length) {
+      ul.innerHTML = '<li class="muted">暂无案例。在线诊断对话可保存为案例。</li>';
+      return;
     }
-    const txtArea = (f.category === 'audio' || f.category === 'video')
-      ? `<textarea class="kb-area" data-edit placeholder="粘贴转写文本 / 现场记录，保存后即入库检索…">${escapeHtml(f.text || '')}</textarea>` : '';
-    const err = f.error ? `<div class="kb-err">⚠️ ${escapeHtml(f.error)}</div>` : '';
-    return `<li class="kb-item" data-id="${f.id}">
-      <div class="kb-top">
-        <div class="kb-ic ${ic.c}">${ic.e}</div>
-        <div class="kb-name"><div class="nm">${escapeHtml(f.name)}</div><div class="sub">${escapeHtml(sub)}</div></div>
-        <span class="kb-badge ${f.status}">${kbStatus(f.status)}</span>
-      </div>
-      ${txtArea}${err}
-      <div class="kb-acts">${acts}</div>
-    </li>`;
-  }
-  async function openKb() { $('kb-modal').classList.remove('hidden'); await renderKb(); }
-  async function renderKb() {
-    const files = await Uploads.list();
-    const chunks = Uploads.getChunks().length;
-    $('kb-stat').textContent = files.length + ' 个文件 · ' + chunks + ' 段知识';
-    const ul = $('kb-list');
-    if (!files.length) { ul.innerHTML = '<div class="empty">还没有文件。拖入 PDF/Word/文本 即可入库检索；音频/视频可转写后入库。</div>'; return; }
-    ul.innerHTML = files.map(kbItemHtml).join('');
-    ul.querySelectorAll('.kb-item').forEach((li) => {
-      const id = li.dataset.id;
-      const del = li.querySelector('[data-act="del"]'); if (del) del.onclick = async () => { await Uploads.remove(id); toast('已删除'); renderKb(); };
-      const tr = li.querySelector('[data-act="transcribe"]'); if (tr) tr.onclick = () => doTranscribe(id, li);
-      const save = li.querySelector('[data-act="save"]'); if (save) save.onclick = async () => { const ta = li.querySelector('.kb-area'); await Uploads.reindex(id, ta.value); toast('✅ 已重新入库'); renderKb(); };
+
+    list.forEach((c) => {
+      const li = document.createElement('li');
+      li.className = 'case-item';
+      li.innerHTML = `
+        <div class="case-head">
+          <span class="case-tag ${c.status}">${c.status}</span>
+          <span class="case-date">${new Date(c.created).toLocaleDateString()}</span>
+        </div>
+        <div class="case-preview">${escapeHtml((c.question || c.content || '').slice(0, 60))}</div>
+        <div class="case-actions">
+          ${c.status === 'pending' ? `<button class="ghost sm case-approve">✓ 采纳</button><button class="ghost sm case-reject">✕ 驳回</button>` : ''}
+          <button class="ghost sm case-view">查看</button>
+          <button class="ghost sm case-del">删除</button>
+        </div>
+      `;
+      li.querySelector('.case-view')?.addEventListener('click', () => showCaseDetail(c));
+      li.querySelector('.case-approve')?.addEventListener('click', async () => {
+        await CaseDB.approve(c.id);
+        await renderCaseList();
+        toast('已采纳');
+      });
+      li.querySelector('.case-reject')?.addEventListener('click', async () => {
+        await CaseDB.reject(c.id);
+        await renderCaseList();
+        toast('已驳回');
+      });
+      li.querySelector('.case-del')?.addEventListener('click', async () => {
+        await CaseDB.remove(c.id);
+        await renderCaseList();
+        toast('已删除');
+      });
+      ul.appendChild(li);
     });
   }
-  async function doTranscribe(id, li) {
-    const btn = li.querySelector('[data-act="transcribe"]');
-    const badge = li.querySelector('.kb-badge');
-    if (btn) { btn.disabled = true; btn.textContent = '转写中…'; }
-    if (badge) { badge.className = 'kb-badge transcribing'; badge.textContent = '转写中'; }
-    try {
-      const mode = localStorage.getItem(C.storageKeys.mode) || 'online';
-      if (mode === 'offline') throw new Error('离线模式不支持 AI 转写，请切在线或手动粘贴文本');
-      const settings = {
-        url: localStorage.getItem(C.storageKeys.endpointUrl) || C.ENDPOINTS[0].url,
-        key: localStorage.getItem(C.storageKeys.apiKey) || '',
-      };
-      await Uploads.transcribe(id, settings);
-      toast('✅ 转写完成并入库');
-    } catch (e) { toast('转写失败：' + e.message, 'err'); }
-    renderKb();
+
+  function showCaseDetail(c) {
+    const detail = document.getElementById('case-detail');
+    detail.classList.remove('hidden');
+    detail.innerHTML = `
+      <div class="detail-head"><span class="case-tag ${c.status}">${c.status}</span> ${new Date(c.created).toLocaleString()}</div>
+      <pre>${escapeHtml(JSON.stringify(c, null, 2))}</pre>
+    `;
   }
 
-  // ---------- 事件绑定 ----------
+  // ---------- 知识库面板 ----------
+  async function openKB() {
+    kbModal.classList.remove('hidden');
+    await renderFileList();
+  }
+
+  async function renderFileList() {
+    if (!globalThis.Uploads) return;
+    const files = await Uploads.getFiles();
+    const list = document.getElementById('kb-file-list');
+    const count = document.getElementById('kb-file-count');
+    count.textContent = files.length + ' 个文件';
+    list.innerHTML = '';
+    if (!files.length) {
+      list.innerHTML = '<li class="muted">暂无上传文件。拖拽或选择文件导入知识库。</li>';
+      return;
+    }
+    files.forEach((f) => {
+      const li = document.createElement('li');
+      li.className = 'file-item';
+      li.innerHTML = `
+        <span class="file-icon">${f.type === 'manual' ? '📝' : '📄'}</span>
+        <span class="file-name">${escapeHtml(f.fileName)}</span>
+        <span class="file-meta">${f.chunkCount ? f.chunkCount + ' 段' : ''}</span>
+        <button class="ghost sm file-del" data-id="${f.id}">删除</button>
+      `;
+      li.querySelector('.file-del')?.addEventListener('click', async () => {
+        await Uploads.removeFile(f.id);
+        await renderFileList();
+        toast('已删除');
+      });
+      list.appendChild(li);
+    });
+  }
+
+  // ---------- 文件上传 ----------
+  async function handleFiles(fileList) {
+    const dropZone = document.getElementById('kb-dropzone');
+    const status = document.getElementById('kb-upload-status');
+    if (!fileList?.length) return;
+
+    status.innerHTML = '处理中...';
+    status.classList.remove('hidden');
+
+    for (const file of fileList) {
+      const msg = document.createElement('div');
+      msg.className = 'upload-progress';
+      msg.textContent = `📄 ${file.name}...`;
+      status.appendChild(msg);
+
+      try {
+        const result = await Uploads.processFile(file);
+        if (result.type === 'document') {
+          msg.textContent = `✅ ${file.name} — 已索引 ${result.chunkCount} 段`;
+        } else if (result.type === 'media') {
+          msg.textContent = `🎵 ${file.name} — 需补充文本（点击编辑）`;
+        }
+      } catch (e) {
+        msg.textContent = `❌ ${file.name} — ${e.message}`;
+      }
+    }
+
+    const done = document.createElement('div');
+    done.textContent = '✅ 处理完成，新内容已注入知识库';
+    done.style.color = '#4ade80';
+    status.appendChild(done);
+
+    await Uploads.refreshKB();
+    await renderFileList();
+  }
+
+  // ---------- 绑定事件 ----------
   function bind() {
-    $('input-bar').addEventListener('submit', (e) => { e.preventDefault(); send(input.value); });
-    input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input.value); } });
-    $('btn-settings').onclick = () => $('settings-modal').classList.remove('hidden');
-    $('btn-cases').onclick = openCases;
-    $('btn-kb').onclick = openKb;
-    $('btn-new').onclick = () => { state.messages = []; chat.innerHTML = ''; welcome(); toast('已开始新对话'); };
-    // 知识库文件上传
-    const fileInput = $('kb-file');
-    const handleFiles = (fl) => {
-      if (!fl || !fl.length) return;
-      toast('📥 正在解析 ' + fl.length + ' 个文件…');
-      Uploads.processFiles(fl).then(() => { if (!$('kb-modal').classList.contains('hidden')) renderKb(); })
-        .catch((err) => toast('解析失败：' + err.message, 'err'));
-    };
-    fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
-    const drop = $('kb-drop');
-    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
-    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); }));
-    drop.addEventListener('drop', (e) => { handleFiles(e.dataTransfer.files); });
-    document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => $(b.dataset.close).classList.add('hidden')));
-    document.querySelectorAll('.modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); }));
-    $('set-save').onclick = saveSettings;
-    $('set-test').onclick = testConn;
-    $('set-clear').onclick = () => {
-      Object.values(C.storageKeys).forEach((k) => localStorage.removeItem(k));
-      state.settings = { url: '', model: '', key: '' }; loadSettings(); setMsg('已清空', ''); updateConnState();
-    };
-    $('cases-refresh').onclick = renderCases;
-    $('cases-export').onclick = exportCases;
-  }
+    // 发送
+    sendBtn?.addEventListener('click', send);
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
 
-  function welcome() {
-    const offline = (localStorage.getItem(C.storageKeys.mode) || 'online') === 'offline';
-    const heroTxt = offline
-      ? '当前为 <b>离线规则引擎</b>：零 Key、可离线、打开即用。点下面的常见问题直接试，或描述你的故障。'
-      : '我是你的现场维修副驾。在线模式 <b>先点右上角 ⚙️ 配置 API Key</b>；或切到离线模式直接可用。';
-    const chips = offline
-      ? ['排气温度 105℃、电流正常、频繁跳机', '螺杆机频繁加卸载、压力波动', '排气口带油、耗油大']
-      : ['排气温度 105℃、电流正常、频繁跳机', '螺杆机频繁加卸载、压力波动', '排气口带油、耗油大', '机器异响、振动大'];
-    const el = document.createElement('div');
-    el.className = 'welcome';
-    el.innerHTML =
-      `<div class="hero-badge"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="16" cy="16" r="12"/><path d="M16 16 L16 6"/><circle cx="16" cy="16" r="2.2" fill="currentColor" stroke="none"/><path d="M6.5 16 H9 M23 16 H25.5 M16 6.5 V9" stroke-width="1.5" opacity=".55"/></svg></div>` +
-      `<h1>老宋 · 空压机 AI 维修副驾</h1>` +
-      `<p>${heroTxt}</p>` +
-      `<div class="chips">${chips.map((c) => `<button class="chip">${escapeHtml(c)}</button>`).join('')}</div>`;
-    chat.appendChild(el);
-    el.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => send(b.textContent)));
+    // 设置
+    document.getElementById('btn-settings')?.addEventListener('click', openSettings);
+    document.querySelectorAll('[data-close]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-close');
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+        if (id === 'settings-modal') closeSettings();
+      });
+    });
+    // settings 关闭按钮
+    settingsModal?.querySelectorAll('[data-close]').forEach((btn) => {
+      btn.addEventListener('click', () => { settingsModal.classList.add('hidden'); closeSettings(); });
+    });
+
+    // 案例
+    document.getElementById('btn-cases')?.addEventListener('click', openCases);
+    document.getElementById('cases-export')?.addEventListener('click', async () => {
+      const json = await CaseDB.exportJSON();
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cases-export.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('已导出');
+    });
+    document.getElementById('cases-refresh')?.addEventListener('click', renderCaseList);
+
+    // 知识库
+    document.getElementById('btn-kb')?.addEventListener('click', openKB);
+
+    // 文件上传
+    const dropZone = document.getElementById('kb-dropzone');
+    const fileInput = document.getElementById('kb-file-input');
+    dropZone?.addEventListener('click', () => fileInput?.click());
+    dropZone?.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone?.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+    });
+    fileInput?.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFiles(e.target.files);
+      e.target.value = '';
+    });
+
+    // 新对话
+    document.getElementById('btn-new')?.addEventListener('click', () => {
+      state.messages = [];
+      chat.innerHTML = '';
+      welcome();
+      try { localStorage.removeItem(CONFIG.STORAGE_KEYS.MESSAGES); } catch (e) {}
+      toast('已开始新对话');
+    });
+
+    // 外部关闭弹窗
+    document.querySelectorAll('.modal').forEach((m) => {
+      m.addEventListener('click', (e) => {
+        if (e.target === m) m.classList.add('hidden');
+      });
+    });
   }
 
   // ---------- 初始化 ----------
   async function init() {
-    bind();
-    loadSettings();
-    try { await K.init(); state.knowledgeReady = true; } catch (e) { toast('知识库加载失败', 'err'); }
-    try { await DB.init(); } catch (e) {}
-    try { await Uploads.init(); } catch (e) { toast('上传模块加载失败', 'err'); }
-    if ((localStorage.getItem(C.storageKeys.mode) || 'online') === 'offline') {
-      OfflineEngine.init().catch(() => toast('离线知识库加载失败', 'err'));
+    // DOM
+    chat = $('chat');
+    input = $('chat-input');
+    sendBtn = $('btn-send');
+    connDot = $('conn-dot');
+    modeSelect = $('mode-select');
+    keyInput = $('api-key-input');
+    endpointInput = $('endpoint-input');
+    settingsModal = $('settings-modal');
+    casesModal = $('cases-modal');
+    kbModal = $('kb-modal');
+
+    // 读取存储
+    state.mode = localStorage.getItem(CONFIG.STORAGE_KEYS.MODE) || 'online';
+    state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.API_KEY) || '';
+    state.endpoint = localStorage.getItem(CONFIG.STORAGE_KEYS.ENDPOINT) || CONFIG.DEFAULT_ENDPOINT;
+
+    // 设置 UI
+    if (modeSelect) modeSelect.value = state.mode;
+    if (keyInput) keyInput.value = state.apiKey;
+    if (endpointInput) endpointInput.value = state.endpoint;
+
+    // 初始化知识库 RAG
+    if (globalThis.KnowledgeRAG) {
+      await KnowledgeRAG.init().catch(() => {});
     }
+
+    // 初始化案例库
+    if (globalThis.CaseDB) {
+      await CaseDB.init().catch(() => {});
+    }
+
+    // 初始化上传模块
+    if (globalThis.Uploads) {
+      await Uploads.init().catch(() => {});
+    }
+
+    // 连接状态
+    updateConnState(state.mode === 'online' && state.apiKey ? 'online' : 'offline');
+
+    // 欢迎
     welcome();
+
+    // 恢复历史消息
+    try {
+      const saved = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.MESSAGES));
+      if (saved?.length) {
+        state.messages = saved;
+        state.messages.forEach((m) => {
+          if (m.role === 'user') addUserMsg(m.content);
+          else {
+            const el = addBotMsg(0);
+            el.innerHTML = renderMarkdown(m.content);
+          }
+        });
+        setTimeout(() => chat.scrollTop = chat.scrollHeight, 50);
+      }
+    } catch (e) {}
+
+    // 绑定事件
+    bind();
+
+    // 加载 PDF/DOCX 解析库 (CDN 懒加载)
+    if (typeof pdfjsLib === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; };
+      document.head.appendChild(script);
+    }
   }
-  init();
+
+  // 页面加载完成后启动
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
