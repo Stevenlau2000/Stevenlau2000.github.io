@@ -1,71 +1,93 @@
-/* cases.js — 案例库持久化（IndexedDB）+ 审核队列状态机 */
-(function (global) {
-  'use strict';
-
-  const DB_NAME = 'impro_os';
+// === Impro 空压机 AI 维修副驾 - 案例库（IndexedDB） ===
+(function () {
+  const DB_NAME = 'ImproCasesDB';
+  const DB_VER = 1;
   const STORE = 'cases';
-  let dbp = null;
 
-  function open() {
-    if (dbp) return dbp;
-    dbp = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          db.createObjectStore(STORE, { keyPath: 'id' });
+  let db = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = (e) => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains(STORE)) {
+          const store = d.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+          store.createIndex('status', 'status', { unique: false });
+          store.createIndex('created', 'created', { unique: false });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror = (e) => reject(e.target.error);
     });
-    return dbp;
   }
 
-  async function tx(mode) {
-    const db = await open();
-    return db.transaction(STORE, mode).objectStore(STORE);
+  async function init() {
+    try { db = await openDB(); } catch (e) { db = null; }
+    return !!db;
   }
 
-  function req2p(req) {
+  function add(caseData) {
     return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const record = {
+        ...caseData,
+        status: 'pending',   // pending | approved | rejected
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+      };
+      const req = store.add(record);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
 
-  async function add(obj) {
-    const now = new Date().toISOString();
-    const rec = Object.assign({ status: 'draft', createdAt: now, updatedAt: now }, obj);
-    const st = await tx('readwrite');
-    await req2p(st.put(rec));
-    return rec;
+  function getAll() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const store = tx.objectStore(STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list = (req.result || []).sort((a, b) => new Date(b.created) - new Date(a.created));
+        resolve(list);
+      };
+      req.onerror = () => reject(req.error);
+    });
   }
 
-  async function list() {
-    const st = await tx('readonly');
-    const all = await req2p(st.getAll());
-    return all.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  function update(id, updates) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const record = getReq.result;
+        if (!record) { reject(new Error('not found')); return; }
+        Object.assign(record, updates, { updated: new Date().toISOString() });
+        store.put(record).onsuccess = () => resolve(true);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   }
 
-  async function get(id) {
-    const st = await tx('readonly');
-    return req2p(st.get(id));
+  function remove(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const st = tx.objectStore(STORE);
+      const req = st.delete(id);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
   }
 
-  async function update(id, patch) {
-    const st = await tx('readwrite');
-    const rec = await req2p(st.get(id));
-    if (!rec) return null;
-    const merged = Object.assign({}, rec, patch, { updatedAt: new Date().toISOString() });
-    await req2p(st.put(merged));
-    return merged;
+  // 审核状态机
+  async function approve(id) { return update(id, { status: 'approved' }); }
+  async function reject(id) { return update(id, { status: 'rejected' }); }
+
+  function exportJSON() {
+    return getAll().then((list) => JSON.stringify(list, null, 2));
   }
 
-  async function remove(id) {
-    const st = await tx('readwrite');
-    await req2p(st.delete(id));
-  }
-
-  global.CasesDB = { init: open, add, list, get, update, remove };
-})(window);
+  globalThis.CaseDB = { init, add, getAll, update, remove, approve, reject, exportJSON };
+})();
