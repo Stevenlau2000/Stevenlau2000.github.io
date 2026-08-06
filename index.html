@@ -1,125 +1,18 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
-<meta name="format-detection" content="telephone=no">
-<title>老宋 · Impro 空压机智能诊断</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-
-<div id="app">
-  <!-- 顶栏 -->
-  <header id="header">
-    <div class="brand">
-      <svg viewBox="0 0 40 40" width="32" height="32">
-        <circle cx="20" cy="20" r="17" fill="none" stroke="#f0b429" stroke-width="2"/>
-        <circle cx="20" cy="20" r="10" fill="none" stroke="#00d4ff" stroke-width="2" stroke-dasharray="47.1" stroke-dashoffset="15.7"/>
-        <text x="20" y="25" text-anchor="middle" fill="#f0b429" font-size="11" font-family="monospace">MPa</text>
-      </svg>
-      <div class="brand-text">
-        <span class="brand-title">老宋</span>
-        <span class="brand-sub">Impro 空压机</span>
-      </div>
-    </div>
-    <div class="conn-status">
-      <span id="conn-dot" class="conn-dot offline" title="连接状态"></span>
-      <span class="conn-label" id="conn-label">离线</span>
-    </div>
-    <div class="actions">
-      <button id="btn-cases" class="icon-btn" title="案例库">📚</button>
-      <button id="btn-kb" class="icon-btn" title="知识库文件">📎</button>
-      <button id="btn-settings" class="icon-btn" title="设置">⚙️</button>
-      <button id="btn-new" class="icon-btn" title="新对话">➕</button>
-    </div>
-  </header>
-
-  <!-- 对话区 -->
-  <main id="chat"></main>
-
-  <!-- 输入区 -->
-  <footer id="input-bar">
-    <textarea id="chat-input" placeholder="描述空压机故障现象，老宋帮您诊断…" rows="1"></textarea>
-    <button id="btn-send" class="send-btn" title="发送">✈</button>
-  </footer>
-</div>
-
-<!-- 设置面板 -->
-<div id="settings-modal" class="modal hidden">
-  <div class="sheet">
-    <div class="sheet-head">
-      <h3>⚙️ 设置</h3>
-      <button class="close-x" data-close="settings-modal">✕</button>
-    </div>
-    <div class="sheet-body">
-      <label>诊断模式</label>
-      <select id="mode-select">
-        <option value="online">🌐 在线模式（LLM）</option>
-        <option value="offline">🔌 离线模式（规则引擎）</option>
-      </select>
-      <label>API Key</label>
-      <input id="api-key-input" type="password" placeholder="留空即离线模式" spellcheck="false">
-      <label>API 端点（可选）</label>
-      <input id="endpoint-input" type="url" placeholder="https://api.hunyuan.cloud.tencent.com/v1" spellcheck="false">
-      <p class="hint">支持 OpenAI 兼容接口。默认为腾讯混元。</p>
-      <button class="ghost" data-close="settings-modal">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- 案例库面板 -->
-<div id="cases-modal" class="modal hidden">
-  <div class="sheet wide">
-    <div class="sheet-head">
-      <h3>📚 案例库 / 审核队列</h3>
-      <button class="close-x" data-close="cases-modal">✕</button>
-    </div>
-    <div class="sheet-body">
-      <div class="cases-toolbar">
-        <span id="cases-count" class="muted">0 条</span>
-        <button id="cases-export" class="ghost sm">导出 JSON</button>
-        <button id="cases-refresh" class="ghost sm">刷新</button>
-      </div>
-      <ul id="cases-list" class="cases-list"></ul>
-      <div id="case-detail" class="case-detail hidden"></div>
-    </div>
-  </div>
-</div>
-
-<!-- 知识库文件面板 -->
-<div id="kb-modal" class="modal hidden">
-  <div class="sheet wide">
-    <div class="sheet-head">
-      <h3>📎 知识库文件</h3>
-      <button class="close-x" data-close="kb-modal">✕</button>
-    </div>
-    <div class="sheet-body">
-      <div id="kb-dropzone" class="dropzone">
-        <p>📁 拖拽文件到此处，或点击选择</p>
-        <p class="hint">支持 PDF / Word(docx) / TXT / Markdown / 音频 / 视频</p>
-        <input id="kb-file-input" type="file" multiple accept=".pdf,.docx,.txt,.md,.markdown,.mp3,.wav,.m4a,.ogg,.mp4,.webm,.mov,.avi" hidden>
-      </div>
-      <div id="kb-upload-status" class="upload-status hidden"></div>
-      <div class="kb-toolbar">
-        <span id="kb-file-count" class="muted">0 个文件</span>
-      </div>
-      <ul id="kb-file-list" class="file-list"></ul>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<script src="js/config.js"></script>
-<script src="js/knowledge.js"></script>
-<script src="js/offline-engine.js"></script>
-<script src="js/cases.js"></script>
-<script src="js/uploads.js"></script>
-<script src="js/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M9 22V12.5L16 8l7 4.5V22l-7 4.5L9 22z' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M9 12.5l7 4.5 7-4.5M16 17v9.5' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <title>WMS 客户门户</title>
+    <script type="module" crossorigin src="/assets/index-uB-IakyL.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CglbReJz.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
